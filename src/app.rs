@@ -45,6 +45,10 @@ pub struct App {
     pub available_partitions: Vec<String>,
     /// Available QOS options
     pub available_qos: Vec<String>,
+    /// Last refresh time
+    pub last_refresh: std::time::Instant,
+    /// Auto-refresh interval in seconds
+    pub refresh_interval: u64,
 }
 
 impl App {
@@ -79,6 +83,8 @@ impl App {
             active_tab: 0,
             available_partitions,
             available_qos,
+            last_refresh: std::time::Instant::now(),
+            refresh_interval: 2,
         })
     }
 
@@ -89,6 +95,8 @@ impl App {
     ) -> Result<()> {
         // Initial job loading
         self.refresh_jobs()?;
+        // Reset the refresh timer
+        self.last_refresh = std::time::Instant::now();
 
         while self.running {
             terminal.draw(|frame| self.render(frame))?;
@@ -107,6 +115,7 @@ impl App {
             .block_on(async { run_squeue(&options).await })?;
 
         self.jobs_list.update_jobs(jobs);
+        self.last_refresh = std::time::Instant::now();
         Ok(())
     }
 
@@ -224,7 +233,13 @@ impl App {
 
     /// Handle tick events (called periodically)
     fn handle_tick(&mut self) {
-        // TODO: Update any time-based components
+        // Check if it's time to refresh jobs (every refresh_interval seconds)
+        if self.last_refresh.elapsed() >= Duration::from_secs(self.refresh_interval) {
+            if let Err(e) = self.refresh_jobs() {
+                self.set_message(format!("Auto-refresh failed: {}", e), 3);
+            }
+            self.last_refresh = std::time::Instant::now();
+        }
 
         // Check if we should clear the message
         if let Some(timeout) = self.message_timeout {
@@ -241,6 +256,11 @@ impl App {
     pub fn set_message(&mut self, message: String, duration_secs: u64) {
         self.message = Some(message);
         self.message_timeout = Some(Duration::from_secs(duration_secs));
+    }
+
+    /// Set the refresh interval in seconds
+    pub fn set_refresh_interval(&mut self, seconds: u64) {
+        self.refresh_interval = seconds;
     }
 
     /// Toggle a job state filter
