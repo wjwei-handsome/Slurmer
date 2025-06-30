@@ -1,3 +1,5 @@
+pub mod columns;
+pub mod filter;
 pub mod jobdetail;
 pub mod jobslist;
 pub mod layout;
