@@ -1,3 +1,4 @@
+use crossterm::event::KeyCode;
 use crossterm::event::KeyModifiers;
 use ratatui::{
     Frame,
@@ -391,8 +392,6 @@ impl FilterPopup {
         all_partitions: &[String],
         all_qos: &[String],
     ) -> FilterAction {
-        use crossterm::event::KeyCode;
-
         // Handle global keys first
         match key.code {
             KeyCode::Esc => return FilterAction::Close,
@@ -402,7 +401,7 @@ impl FilterPopup {
                     self.input_mode = false;
                 } else {
                     // Cycle through focusable elements
-                    self.cycle_focus();
+                    // self.cycle_focus();
                 }
                 return FilterAction::None;
             }
@@ -523,6 +522,14 @@ impl FilterPopup {
                             self.qos_list_state.select(Some(selected - 1));
                         }
                     }
+                    FilterFocus::Username => {
+                        // Move focus to the name filter if up is pressed in the username field
+                        self.focus = FilterFocus::NameFilter;
+                    }
+                    FilterFocus::NameFilter => {
+                        // Move focus to the username field if up is pressed in the name filter
+                        self.focus = FilterFocus::Username;
+                    }
                     _ => {}
                 }
                 FilterAction::None
@@ -546,6 +553,20 @@ impl FilterPopup {
                         if selected < all_qos.len() - 1 {
                             self.qos_list_state.select(Some(selected + 1));
                         }
+                    }
+                    FilterFocus::Username => {
+                        // Move focus to the name filter if up is pressed in the username field
+                        if self.input_mode {
+                            self.input_mode = false;
+                        }
+                        self.focus = FilterFocus::NameFilter;
+                    }
+                    FilterFocus::NameFilter => {
+                        // Move focus to the username field if up is pressed in the name filter
+                        if self.input_mode {
+                            self.input_mode = false;
+                        }
+                        self.focus = FilterFocus::Username;
                     }
                     _ => {}
                 }
@@ -577,8 +598,6 @@ impl FilterPopup {
         key: crossterm::event::KeyEvent,
         options: &mut SqueueOptions,
     ) -> FilterAction {
-        use crossterm::event::KeyCode;
-
         match key.code {
             KeyCode::Enter => {
                 // Apply the text input
