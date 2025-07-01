@@ -159,6 +159,9 @@ impl App {
             .runtime
             .block_on(async { run_squeue(&options).await })?;
 
+        let mut filter_stats = Vec::new();
+        let initial_count = jobs.len();
+
         // Apply regex name filter if it exists
         if let Some(name_filter) = &self.squeue_options.name_filter {
             if !name_filter.is_empty() {
@@ -170,23 +173,78 @@ impl App {
                         jobs.retain(|job| re.is_match(&job.name));
                         let after_count = jobs.len();
 
-                        // Show filtering info if significant
+                        // Track filtering stats
                         if before_count != after_count && before_count > 0 {
-                            let filter_pct = (after_count as f64 / before_count as f64) * 100.0;
-                            self.set_status_message(
-                                format!(
-                                    "Regex filtered: {}/{} jobs shown ({:.1}%)",
-                                    after_count, before_count, filter_pct
-                                ),
-                                3,
-                            );
+                            filter_stats.push(format!(
+                                "name: {}/{} ({:.1}%)",
+                                after_count,
+                                before_count,
+                                (after_count as f64 / before_count as f64) * 100.0
+                            ));
                         }
                     }
                     Err(e) => {
-                        self.set_status_message(format!("Invalid regex pattern: {}", e), 3);
+                        self.set_status_message(format!("Invalid name regex pattern: {}", e), 3);
                     }
                 }
             }
+        }
+
+        // Apply regex node filter if it exists
+        if let Some(node_filter) = &self.squeue_options.node_filter {
+            if !node_filter.is_empty() {
+                // Try to compile the regex pattern
+                match regex::Regex::new(node_filter) {
+                    Ok(re) => {
+                        // Filter jobs by node name using regex
+                        let before_count = jobs.len();
+                        jobs.retain(|job| {
+                            // If there's a node field, check it against the regex
+                            if let Some(node) = &job.node {
+                                re.is_match(node)
+                            } else {
+                                // If no node name available, don't filter this job
+                                true
+                            }
+                        });
+                        let after_count = jobs.len();
+
+                        // Track filtering stats
+                        if before_count != after_count && before_count > 0 {
+                            filter_stats.push(format!(
+                                "node: {}/{} ({:.1}%)",
+                                after_count,
+                                before_count,
+                                (after_count as f64 / before_count as f64) * 100.0
+                            ));
+                        }
+                    }
+                    Err(e) => {
+                        self.set_status_message(format!("Invalid node regex pattern: {}", e), 3);
+                    }
+                }
+            }
+        }
+
+        // Show filter statistics if any filters were applied
+        if !filter_stats.is_empty() {
+            let final_count = jobs.len();
+            let total_pct = if initial_count > 0 {
+                (final_count as f64 / initial_count as f64) * 100.0
+            } else {
+                100.0
+            };
+
+            self.set_status_message(
+                format!(
+                    "Filtered: {}/{} total ({:.1}%) [{}]",
+                    final_count,
+                    initial_count,
+                    total_pct,
+                    filter_stats.join(", ")
+                ),
+                5,
+            );
         }
 
         self.jobs_list.update_jobs(jobs);
@@ -568,7 +626,21 @@ impl App {
             // Validate regex pattern
             match regex::Regex::new(&name) {
                 Ok(_) => self.squeue_options.name_filter = Some(name),
-                Err(e) => self.set_status_message(format!("Invalid regex pattern: {}", e), 3),
+                Err(e) => self.set_status_message(format!("Invalid name regex pattern: {}", e), 3),
+            }
+        }
+    }
+
+    /// Set the node filter
+    pub fn set_node_filter(&mut self, node: String) {
+        // Store the regex pattern as is - it will be applied in refresh_jobs
+        if node.is_empty() {
+            self.squeue_options.node_filter = None;
+        } else {
+            // Validate regex pattern
+            match regex::Regex::new(&node) {
+                Ok(_) => self.squeue_options.node_filter = Some(node),
+                Err(e) => self.set_status_message(format!("Invalid node regex pattern: {}", e), 3),
             }
         }
     }
@@ -641,6 +713,11 @@ impl App {
         // Name filter (regex)
         if let Some(name) = &self.squeue_options.name_filter {
             parts.push(format!("name_regex={}", name));
+        }
+
+        // Node filter (regex)
+        if let Some(node) = &self.squeue_options.node_filter {
+            parts.push(format!("node_regex={}", node));
         }
 
         parts.join(", ")

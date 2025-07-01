@@ -13,6 +13,7 @@ pub struct SqueueOptions {
     pub partitions: Vec<String>,
     pub qos: Vec<String>,
     pub name_filter: Option<String>,
+    pub node_filter: Option<String>,
     pub format: String,
     pub sorts: HashMap<String, bool>, // Map of field to sort direction (true for ascending, false for descending)
 }
@@ -32,6 +33,7 @@ impl Default for SqueueOptions {
             partitions: Vec::new(),
             qos: Vec::new(),
             name_filter: None,
+            node_filter: None,
             format: "%i|%j|%u|%T|%M|%N|%C|%m|%P|%q".to_string(), // JobID|Name|User|State|Time|Nodes|CPUs|Memory|Partition|QOS
             sorts,
         }
@@ -222,7 +224,7 @@ fn parse_squeue_output(output: &Output, format: &str) -> Result<Vec<Job>> {
                         0
                     })
                 }
-                "%N" => job.nodes = 1, // If node name is provided, assume 1 node
+                "%N" => job.node = Some(value),
                 "%C" => {
                     job.cpus = value.parse::<u32>().unwrap_or_else(|_| {
                         eprintln!("Failed to parse CPU count: {}", value);

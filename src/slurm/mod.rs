@@ -64,6 +64,7 @@ pub struct Job {
     pub state: JobState,
     pub time: String,
     pub nodes: u32,
+    pub node: Option<String>,
     pub cpus: u32,
     pub memory: String,
     pub partition: String,
@@ -74,6 +75,7 @@ pub struct Job {
     pub submit_time: Option<String>,
     pub start_time: Option<String>,
     pub end_time: Option<String>,
+    pub pending_reason: Option<String>,
 }
 
 impl Default for Job {
@@ -85,6 +87,7 @@ impl Default for Job {
             state: JobState::Other,
             time: String::new(),
             nodes: 0,
+            node: None,
             cpus: 0,
             memory: String::new(),
             partition: String::new(),
@@ -95,6 +98,7 @@ impl Default for Job {
             submit_time: None,
             start_time: None,
             end_time: None,
+            pending_reason: None,
         }
     }
 }

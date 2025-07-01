@@ -17,6 +17,7 @@ pub enum JobColumn {
     Partition,
     QoS,
     Nodes,
+    Node,
     CPUs,
     Time,
     Memory,
@@ -26,6 +27,7 @@ pub enum JobColumn {
     SubmitTime,
     StartTime,
     EndTime,
+    PReason,
 }
 
 impl JobColumn {
@@ -39,6 +41,7 @@ impl JobColumn {
             JobColumn::Partition => "Partition",
             JobColumn::QoS => "QoS",
             JobColumn::Nodes => "Nodes",
+            JobColumn::Node => "Node",
             JobColumn::CPUs => "CPUs",
             JobColumn::Time => "Time",
             JobColumn::Memory => "Memory",
@@ -48,6 +51,7 @@ impl JobColumn {
             JobColumn::SubmitTime => "Submit",
             JobColumn::StartTime => "Start",
             JobColumn::EndTime => "End",
+            JobColumn::PReason => "Reason", // Pending reason
         }
     }
 
@@ -61,6 +65,7 @@ impl JobColumn {
             JobColumn::Partition => "%P",  // Partition
             JobColumn::QoS => "%q",        // Quality of Service
             JobColumn::Nodes => "%D",      // Node count
+            JobColumn::Node => "%N",       // Node list
             JobColumn::CPUs => "%C",       // CPU count
             JobColumn::Time => "%M",       // Time limit
             JobColumn::Memory => "%m",     // Memory
@@ -70,6 +75,7 @@ impl JobColumn {
             JobColumn::SubmitTime => "%V", // Submission time
             JobColumn::StartTime => "%S",  // Start time
             JobColumn::EndTime => "%e",    // End time
+            JobColumn::PReason => "%R",    // Pending reason
         }
     }
 
@@ -83,6 +89,7 @@ impl JobColumn {
             JobColumn::Partition => Constraint::Length(12),
             JobColumn::QoS => Constraint::Length(10),
             JobColumn::Nodes => Constraint::Length(7),
+            JobColumn::Node => Constraint::Percentage(12), // Node list can be long
             JobColumn::CPUs => Constraint::Length(6),
             JobColumn::Time => Constraint::Length(12),
             JobColumn::Memory => Constraint::Length(10),
@@ -92,6 +99,7 @@ impl JobColumn {
             JobColumn::SubmitTime => Constraint::Length(19),
             JobColumn::StartTime => Constraint::Length(19),
             JobColumn::EndTime => Constraint::Length(19),
+            JobColumn::PReason => Constraint::Percentage(20), // Pending reason can be long
         }
     }
 
@@ -105,6 +113,7 @@ impl JobColumn {
             JobColumn::Partition,
             JobColumn::QoS,
             JobColumn::Nodes,
+            JobColumn::Node,
             JobColumn::CPUs,
             JobColumn::Time,
             JobColumn::Memory,
@@ -114,6 +123,7 @@ impl JobColumn {
             JobColumn::SubmitTime,
             JobColumn::StartTime,
             JobColumn::EndTime,
+            JobColumn::PReason,
         ]
     }
 
@@ -127,7 +137,7 @@ impl JobColumn {
             JobColumn::User,
             JobColumn::State,
             JobColumn::Time,
-            JobColumn::Nodes,
+            JobColumn::Node,
             JobColumn::CPUs,
             JobColumn::Memory,
             JobColumn::Partition,

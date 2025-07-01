@@ -226,6 +226,7 @@ impl JobsList {
                         JobColumn::Partition => job.partition.clone(),
                         JobColumn::QoS => job.qos.clone(),
                         JobColumn::Nodes => job.nodes.to_string(),
+                        JobColumn::Node => job.node.clone().unwrap_or_else(|| "-".to_string()),
                         JobColumn::CPUs => job.cpus.to_string(),
                         JobColumn::Time => job.time.clone(),
                         JobColumn::Memory => job.memory.clone(),
@@ -248,6 +249,10 @@ impl JobsList {
                         JobColumn::EndTime => {
                             job.end_time.clone().unwrap_or_else(|| "-".to_string())
                         }
+                        JobColumn::PReason => job
+                            .pending_reason
+                            .clone()
+                            .unwrap_or_else(|| "-".to_string()),
                     };
                     Cell::from(content)
                 })
