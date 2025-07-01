@@ -784,6 +784,12 @@ impl ColumnsPopup {
             return Some("i".to_string());
         }
 
+        // 创建排序字符串：多列排序时用逗号分隔
+        // 排序方向通过前缀表示：无前缀表示升序，'-'前缀表示降序
+        // 例如：按名称升序、ID降序排序的格式为 "j,-i"
+        //
+        // Slurm squeue命令支持多列排序，排序优先级从左到右
+        // 例如 "--sort j,i" 表示先按名称排序，名称相同的再按ID排序
         Some(
             self.sort_columns
                 .iter()
@@ -792,7 +798,8 @@ impl ColumnsPopup {
                         SortOrder::Ascending => "",
                         SortOrder::Descending => "-",
                     };
-                    // Extract the format code without the % and ensure it's valid
+                    // 提取不带%的格式代码作为Slurm排序键
+                    // 例如：%j -> j, %i -> i
                     let code = sort_col.column.format_code().trim_start_matches('%');
                     format!("{}{}", prefix, code)
                 })

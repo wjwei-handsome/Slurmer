@@ -14,14 +14,17 @@ pub struct SqueueOptions {
     pub qos: Vec<String>,
     pub name_filter: Option<String>,
     pub format: String,
-    pub sort_by: Option<String>,
-    pub sort_desc: bool,
+    pub sorts: HashMap<String, bool>, // Map of field to sort direction (true for ascending, false for descending)
 }
 
 impl Default for SqueueOptions {
     fn default() -> Self {
         // Default username from environment
         let username = std::env::var("USER").unwrap_or_else(|_| "".to_string());
+
+        // Default sort options
+        let mut sorts = HashMap::new();
+        sorts.insert("i".to_string(), true); // Default sort by job ID ascending
 
         Self {
             user: Some(username),
@@ -30,8 +33,7 @@ impl Default for SqueueOptions {
             qos: Vec::new(),
             name_filter: None,
             format: "%i|%j|%u|%T|%M|%N|%C|%m|%P|%q".to_string(), // JobID|Name|User|State|Time|Nodes|CPUs|Memory|Partition|QOS
-            sort_by: None,
-            sort_desc: false,
+            sorts,
         }
     }
 }
@@ -96,14 +98,19 @@ impl SqueueOptions {
         args.push(self.format.clone());
 
         // Sort options
-        if let Some(sort_by) = &self.sort_by {
-            let sort_flag = if self.sort_desc {
-                format!("-{}", sort_by)
-            } else {
-                sort_by.clone()
-            };
+        if !self.sorts.is_empty() {
+            // 构建排序字符串: 格式为 "j,-i,+q" (按名称升序，ID降序，QOS升序)
+            let sort_string = self.sorts
+                .iter()
+                .map(|(field, ascending)| {
+                    let prefix = if *ascending { "" } else { "-" };
+                    format!("{}{}", prefix, field)
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+
             args.push("--sort".to_string());
-            args.push(sort_flag);
+            args.push(sort_string);
         }
 
         // No header flag to make parsing easier
@@ -127,7 +134,7 @@ pub async fn run_squeue(options: &SqueueOptions) -> Result<Vec<Job>> {
         Ok(output) => {
             eprintln!("Running squeue command completed");
             output
-        },
+        }
         Err(e) => {
             eprintln!("Error running squeue command: {}", e);
             return Ok(Vec::new());
@@ -145,6 +152,7 @@ pub async fn run_squeue(options: &SqueueOptions) -> Result<Vec<Job>> {
     parse_squeue_output(&output, &options.format)
 }
 
+/// Dynamic parsing of squeue output based on the provided format string
 fn parse_squeue_output(output: &Output, format: &str) -> Result<Vec<Job>> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let lines: Vec<&str> = stdout.lines().collect();
@@ -157,12 +165,11 @@ fn parse_squeue_output(output: &Output, format: &str) -> Result<Vec<Job>> {
         return Ok(jobs);
     }
 
-    // Parse format string to determine which fields are present
     let format_codes: Vec<&str> = format.split('|').collect();
 
     if format_codes.is_empty() {
         eprintln!("Warning: Empty format codes, using default format");
-        return Ok(jobs); // Return empty jobs list if format is invalid
+        return Ok(jobs);
     }
 
     eprintln!("Format codes: {:?}", format_codes);
@@ -173,29 +180,26 @@ fn parse_squeue_output(output: &Output, format: &str) -> Result<Vec<Job>> {
         }
 
         let parts: Vec<&str> = line.split('|').collect();
-        // Check if we have enough parts to be a valid job entry
         if parts.is_empty() || parts.len() < format_codes.len() / 2 {
-            // Skip lines that don't have at least half the expected number of fields
             eprintln!("Skipping invalid line: {}", line);
             continue;
         }
 
-        // Create a default job
         let mut job = Job::default();
 
-        // Map format codes to job fields
+        // Ensure we have enough parts to match the format codes
         for (i, part) in parts.iter().enumerate() {
             if i >= format_codes.len() {
                 break;
             }
 
             let value = part.trim().to_string();
-            // Handle empty values more gracefully
+            // Skip empty values or "N/A"
             if value.is_empty() || value == "N/A" {
                 continue;
             }
 
-            // Handle format code index safely
+            // Match the value to the corresponding format code
             if i >= format_codes.len() {
                 eprintln!("Warning: More parts than format codes for line");
                 break;
@@ -205,28 +209,36 @@ fn parse_squeue_output(output: &Output, format: &str) -> Result<Vec<Job>> {
                 "%i" | "%A" => job.id = value,
                 "%j" => job.name = value,
                 "%u" => job.user = value,
-                "%T" => job.state = JobState::from_str(&value).unwrap_or_else(|_| {
-                    eprintln!("Failed to parse job state: {}", value);
-                    JobState::Other
-                }),
+                "%T" => {
+                    job.state = JobState::from_str(&value).unwrap_or_else(|_| {
+                        eprintln!("Failed to parse job state: {}", value);
+                        JobState::Other
+                    })
+                }
                 "%M" => job.time = value,
-                "%D" => job.nodes = value.parse::<u32>().unwrap_or_else(|_| {
-                    eprintln!("Failed to parse node count: {}", value);
-                    0
-                }),
+                "%D" => {
+                    job.nodes = value.parse::<u32>().unwrap_or_else(|_| {
+                        eprintln!("Failed to parse node count: {}", value);
+                        0
+                    })
+                }
                 "%N" => job.nodes = 1, // If node name is provided, assume 1 node
-                "%C" => job.cpus = value.parse::<u32>().unwrap_or_else(|_| {
-                    eprintln!("Failed to parse CPU count: {}", value);
-                    0
-                }),
+                "%C" => {
+                    job.cpus = value.parse::<u32>().unwrap_or_else(|_| {
+                        eprintln!("Failed to parse CPU count: {}", value);
+                        0
+                    })
+                }
                 "%m" => job.memory = value,
                 "%P" => job.partition = value,
                 "%q" => job.qos = value,
                 "%a" => job.account = Some(value),
-                "%Q" => job.priority = value.parse::<u32>().ok().or_else(|| {
-                    eprintln!("Failed to parse priority: {}", value);
-                    None
-                }),
+                "%Q" => {
+                    job.priority = value.parse::<u32>().ok().or_else(|| {
+                        eprintln!("Failed to parse priority: {}", value);
+                        None
+                    })
+                }
                 "%Z" => job.work_dir = Some(value),
                 "%V" => job.submit_time = Some(value),
                 "%S" => job.start_time = Some(value),

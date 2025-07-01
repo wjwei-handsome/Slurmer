@@ -33,7 +33,7 @@ impl JobsList {
     /// Update the list of jobs
     pub fn update_jobs(&mut self, jobs: Vec<Job>) {
         self.jobs = jobs;
-        self.sort_jobs();
+        // Jobs are already sorted by the squeue command
 
         // Reset selection if out of bounds
         if let Some(selected) = self.state.selected() {
@@ -46,71 +46,11 @@ impl JobsList {
     }
 
     /// Sort jobs based on current sort column and direction
+    /// This is just a placeholder since the actual sorting is handled by the Slurm squeue command
     pub fn sort_jobs(&mut self) {
-        // Safety check for column index
-        if self.sort_column >= 16 {
-            return;
-        }
-
-        // Define a sort key function to handle different column types consistently
-        let sort_key = |job: &Job, column: usize| -> String {
-            match column {
-                0 => job.id.clone(),
-                1 => job.name.clone(),
-                2 => job.user.clone(),
-                3 => format!("{:?}", job.state),
-                4 => job.partition.clone(),
-                5 => job.qos.clone(),
-                6 => job.nodes.to_string(),
-                7 => job.cpus.to_string(),
-                8 => job.time.clone(),
-                9 => job.memory.clone(),
-                10 => job.account.clone().unwrap_or_default(),
-                11 => job.priority.map(|p| p.to_string()).unwrap_or_default(),
-                12 => job.work_dir.clone().unwrap_or_default(),
-                13 => job.submit_time.clone().unwrap_or_default(),
-                14 => job.start_time.clone().unwrap_or_default(),
-                15 => job.end_time.clone().unwrap_or_default(),
-                // Default to empty string for any other columns
-                _ => String::new(),
-            }
-        };
-
-        // Special case for numeric ID sorting
-        if self.sort_column == 0 {
-            self.jobs.sort_by(|a, b| {
-                let a_id = a.id.parse::<u32>().unwrap_or(0);
-                let b_id = b.id.parse::<u32>().unwrap_or(0);
-                if self.sort_ascending {
-                    a_id.cmp(&b_id)
-                } else {
-                    b_id.cmp(&a_id)
-                }
-            });
-        } else if self.sort_column == 11 {
-            // Special case for priority sorting (numeric)
-            self.jobs.sort_by(|a, b| {
-                let a_priority = a.priority.unwrap_or(0);
-                let b_priority = b.priority.unwrap_or(0);
-                if self.sort_ascending {
-                    a_priority.cmp(&b_priority)
-                } else {
-                    b_priority.cmp(&a_priority)
-                }
-            });
-        } else {
-            // Sort by the selected column using the sort_key function
-            self.jobs.sort_by(|a, b| {
-                let key_a = sort_key(a, self.sort_column);
-                let key_b = sort_key(b, self.sort_column);
-
-                if self.sort_ascending {
-                    key_a.cmp(&key_b)
-                } else {
-                    key_b.cmp(&key_a)
-                }
-            });
-        }
+        // No need to sort jobs manually
+        // The sorting is handled by Slurm's squeue command with the --sort parameter
+        // This function is kept for backward compatibility
     }
 
     /// Toggle job selection
@@ -135,6 +75,7 @@ impl JobsList {
     }
 
     /// Change sort column
+    /// This only updates the UI display, actual sorting is done by squeue
     pub fn sort_by(&mut self, column: usize) {
         if self.sort_column == column {
             // Toggle sort direction if already sorting by this column
@@ -144,7 +85,7 @@ impl JobsList {
             self.sort_column = column;
             self.sort_ascending = true;
         }
-        self.sort_jobs();
+        // No need to call sort_jobs() as sorting is handled by squeue
     }
 
     /// Update sort configuration based on SortColumn settings
@@ -161,7 +102,7 @@ impl JobsList {
             self.sort_column = column_index;
             self.sort_ascending =
                 matches!(first_sort.order, crate::ui::columns::SortOrder::Ascending);
-            self.sort_jobs();
+            // No need to sort jobs as sorting is handled by squeue
         }
     }
 

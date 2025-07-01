@@ -618,36 +618,38 @@ impl App {
         self.squeue_options.format = format_string;
 
         // Build sort string based on sort columns
+        // remove any existing sort columns
+        self.squeue_options.sorts.clear();
         if !self.sort_columns.is_empty() {
-            let first_sort = &self.sort_columns[0];
-            let sort_code = first_sort.column.format_code();
-            let sort_direction = if matches!(first_sort.order, SortOrder::Descending) {
-                "-"
-            } else {
-                ""
-            };
-            // actually, sort_code is just a single character
-            // remove % from the format code
-            let sort_code = sort_code.trim_start_matches('%');
-            self.squeue_options.sort_by = Some(format!("{}{}", sort_direction, sort_code));
-            self.squeue_options.sort_desc = matches!(first_sort.order, SortOrder::Descending);
+            // Add sort colsumns to the squeue options
+            for sort_col in &self.sort_columns {
+                // get the format code for the column, removing any leading '%'
+                let sort_code = sort_col.column.format_code().trim_start_matches('%');
+                // set the sort order
+                let is_ascending = matches!(sort_col.order, SortOrder::Ascending);
 
-            // Update jobs list sorting based on sort columns
-            let sort_column_index = self
-                .selected_columns
-                .iter()
-                .position(|col| {
-                    std::mem::discriminant(col) == std::mem::discriminant(&first_sort.column)
-                })
-                .unwrap_or(0);
+                // add to the squeue options
+                self.squeue_options
+                    .sorts
+                    .insert(sort_code.to_string(), is_ascending);
+            }
 
-            // Set the jobs list sort column and direction
-            self.jobs_list.sort_column = sort_column_index;
-            self.jobs_list.sort_ascending = matches!(first_sort.order, SortOrder::Ascending);
+            // Set the first sort column as the primary sort
+            if let Some(first_sort) = self.sort_columns.first() {
+                let sort_column_index = self
+                    .selected_columns
+                    .iter()
+                    .position(|col| {
+                        std::mem::discriminant(col) == std::mem::discriminant(&first_sort.column)
+                    })
+                    .unwrap_or(0);
+
+                // Set the jobs list sort column and order
+                self.jobs_list.sort_column = sort_column_index;
+                self.jobs_list.sort_ascending = matches!(first_sort.order, SortOrder::Ascending);
+            }
         } else {
-            // Default to sort by job ID if no sort columns
-            self.squeue_options.sort_by = Some("i".to_string());
-            self.squeue_options.sort_desc = false;
+            self.squeue_options.sorts.insert("i".to_string(), true);
             self.jobs_list.sort_column = 0;
             self.jobs_list.sort_ascending = true;
         }
