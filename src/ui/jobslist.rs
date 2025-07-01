@@ -65,6 +65,12 @@ impl JobsList {
                 7 => job.cpus.to_string(),
                 8 => job.time.clone(),
                 9 => job.memory.clone(),
+                10 => job.account.clone().unwrap_or_default(),
+                11 => job.priority.map(|p| p.to_string()).unwrap_or_default(),
+                12 => job.work_dir.clone().unwrap_or_default(),
+                13 => job.submit_time.clone().unwrap_or_default(),
+                14 => job.start_time.clone().unwrap_or_default(),
+                15 => job.end_time.clone().unwrap_or_default(),
                 // Default to empty string for any other columns
                 _ => String::new(),
             }
@@ -79,6 +85,17 @@ impl JobsList {
                     a_id.cmp(&b_id)
                 } else {
                     b_id.cmp(&a_id)
+                }
+            });
+        } else if self.sort_column == 11 {
+            // Special case for priority sorting (numeric)
+            self.jobs.sort_by(|a, b| {
+                let a_priority = a.priority.unwrap_or(0);
+                let b_priority = b.priority.unwrap_or(0);
+                if self.sort_ascending {
+                    a_priority.cmp(&b_priority)
+                } else {
+                    b_priority.cmp(&a_priority)
                 }
             });
         } else {
@@ -279,12 +296,25 @@ impl JobsList {
                         JobColumn::CPUs => job.cpus.to_string(),
                         JobColumn::Time => job.time.clone(),
                         JobColumn::Memory => job.memory.clone(),
-                        JobColumn::Account => "-".to_string(), // Placeholder with better format
-                        JobColumn::Priority => "-".to_string(), // Placeholder with better format
-                        JobColumn::WorkDir => "-".to_string(), // Placeholder with better format
-                        JobColumn::SubmitTime => "-".to_string(), // Placeholder with better format
-                        JobColumn::StartTime => "-".to_string(), // Placeholder with better format
-                        JobColumn::EndTime => "-".to_string(), // Placeholder with better format
+                        JobColumn::Account => {
+                            job.account.clone().unwrap_or_else(|| "-".to_string())
+                        }
+                        JobColumn::Priority => job
+                            .priority
+                            .map(|p| p.to_string())
+                            .unwrap_or_else(|| "-".to_string()),
+                        JobColumn::WorkDir => {
+                            job.work_dir.clone().unwrap_or_else(|| "-".to_string())
+                        }
+                        JobColumn::SubmitTime => {
+                            job.submit_time.clone().unwrap_or_else(|| "-".to_string())
+                        }
+                        JobColumn::StartTime => {
+                            job.start_time.clone().unwrap_or_else(|| "-".to_string())
+                        }
+                        JobColumn::EndTime => {
+                            job.end_time.clone().unwrap_or_else(|| "-".to_string())
+                        }
                     };
                     Cell::from(content)
                 })

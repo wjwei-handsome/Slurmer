@@ -37,6 +37,19 @@ impl Default for SqueueOptions {
 }
 
 impl SqueueOptions {
+    // Get the current format codes as a Vec<&str>
+    pub fn format_codes(&self) -> Vec<&str> {
+        self.format.split('|').collect()
+    }
+
+    // Validate the format string to ensure it contains valid format codes
+    pub fn validate_format(&self) -> bool {
+        let codes = self.format_codes();
+        !codes.is_empty() && codes.iter().all(|code| code.starts_with('%'))
+    }
+}
+
+impl SqueueOptions {
     pub fn to_args(&self) -> Vec<String> {
         let mut args = Vec::new();
 
@@ -102,17 +115,57 @@ impl SqueueOptions {
 
 pub async fn run_squeue(options: &SqueueOptions) -> Result<Vec<Job>> {
     let args = options.to_args();
+    eprintln!("Running squeue with args: {:?}", args);
 
-    let output = Command::new("squeue").args(&args).output().await?;
+    // Validate format string
+    if !options.validate_format() {
+        eprintln!("Warning: Invalid format string: {}", options.format);
+        return Ok(Vec::new());
+    }
 
-    parse_squeue_output(&output)
+    let output = match Command::new("squeue").args(&args).output().await {
+        Ok(output) => {
+            eprintln!("Running squeue command completed");
+            output
+        },
+        Err(e) => {
+            eprintln!("Error running squeue command: {}", e);
+            return Ok(Vec::new());
+        }
+    };
+
+    // Check if squeue returned an error
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        eprintln!("squeue returned an error: {}", stderr);
+        return Ok(Vec::new());
+    }
+
+    // Pass the format options with the output to ensure correct parsing
+    parse_squeue_output(&output, &options.format)
 }
 
-fn parse_squeue_output(output: &Output) -> Result<Vec<Job>> {
+fn parse_squeue_output(output: &Output, format: &str) -> Result<Vec<Job>> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let lines: Vec<&str> = stdout.lines().collect();
 
     let mut jobs = Vec::new();
+
+    // Handle empty output
+    if stdout.trim().is_empty() {
+        eprintln!("No jobs found in squeue output");
+        return Ok(jobs);
+    }
+
+    // Parse format string to determine which fields are present
+    let format_codes: Vec<&str> = format.split('|').collect();
+
+    if format_codes.is_empty() {
+        eprintln!("Warning: Empty format codes, using default format");
+        return Ok(jobs); // Return empty jobs list if format is invalid
+    }
+
+    eprintln!("Format codes: {:?}", format_codes);
 
     for line in lines {
         if line.trim().is_empty() {
@@ -120,25 +173,69 @@ fn parse_squeue_output(output: &Output) -> Result<Vec<Job>> {
         }
 
         let parts: Vec<&str> = line.split('|').collect();
-
-        // Ensure we have the expected number of parts
-        if parts.len() < 10 {
+        // Check if we have enough parts to be a valid job entry
+        if parts.is_empty() || parts.len() < format_codes.len() / 2 {
+            // Skip lines that don't have at least half the expected number of fields
+            eprintln!("Skipping invalid line: {}", line);
             continue;
         }
 
-        // Parse job information
-        let job = Job {
-            id: parts[0].trim().to_string(),
-            name: parts[1].trim().to_string(),
-            user: parts[2].trim().to_string(),
-            state: JobState::from_str(parts[3].trim()).unwrap_or(JobState::Other),
-            time: parts[4].trim().to_string(),
-            nodes: parts[5].trim().parse::<u32>().unwrap_or(0),
-            cpus: parts[6].trim().parse::<u32>().unwrap_or(0),
-            memory: parts[7].trim().to_string(),
-            partition: parts[8].trim().to_string(),
-            qos: parts[9].trim().to_string(),
-        };
+        // Create a default job
+        let mut job = Job::default();
+
+        // Map format codes to job fields
+        for (i, part) in parts.iter().enumerate() {
+            if i >= format_codes.len() {
+                break;
+            }
+
+            let value = part.trim().to_string();
+            // Handle empty values more gracefully
+            if value.is_empty() || value == "N/A" {
+                continue;
+            }
+
+            // Handle format code index safely
+            if i >= format_codes.len() {
+                eprintln!("Warning: More parts than format codes for line");
+                break;
+            }
+
+            match format_codes[i] {
+                "%i" | "%A" => job.id = value,
+                "%j" => job.name = value,
+                "%u" => job.user = value,
+                "%T" => job.state = JobState::from_str(&value).unwrap_or_else(|_| {
+                    eprintln!("Failed to parse job state: {}", value);
+                    JobState::Other
+                }),
+                "%M" => job.time = value,
+                "%D" => job.nodes = value.parse::<u32>().unwrap_or_else(|_| {
+                    eprintln!("Failed to parse node count: {}", value);
+                    0
+                }),
+                "%N" => job.nodes = 1, // If node name is provided, assume 1 node
+                "%C" => job.cpus = value.parse::<u32>().unwrap_or_else(|_| {
+                    eprintln!("Failed to parse CPU count: {}", value);
+                    0
+                }),
+                "%m" => job.memory = value,
+                "%P" => job.partition = value,
+                "%q" => job.qos = value,
+                "%a" => job.account = Some(value),
+                "%Q" => job.priority = value.parse::<u32>().ok().or_else(|| {
+                    eprintln!("Failed to parse priority: {}", value);
+                    None
+                }),
+                "%Z" => job.work_dir = Some(value),
+                "%V" => job.submit_time = Some(value),
+                "%S" => job.start_time = Some(value),
+                "%e" => job.end_time = Some(value),
+                _ => {
+                    eprintln!("Unknown format code: {}", format_codes[i]);
+                }
+            }
+        }
 
         jobs.push(job);
     }

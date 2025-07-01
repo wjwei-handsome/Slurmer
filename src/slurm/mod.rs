@@ -68,6 +68,12 @@ pub struct Job {
     pub memory: String,
     pub partition: String,
     pub qos: String,
+    pub account: Option<String>,
+    pub priority: Option<u32>,
+    pub work_dir: Option<String>,
+    pub submit_time: Option<String>,
+    pub start_time: Option<String>,
+    pub end_time: Option<String>,
 }
 
 impl Default for Job {
@@ -83,6 +89,12 @@ impl Default for Job {
             memory: String::new(),
             partition: String::new(),
             qos: String::new(),
+            account: None,
+            priority: None,
+            work_dir: None,
+            submit_time: None,
+            start_time: None,
+            end_time: None,
         }
     }
 }

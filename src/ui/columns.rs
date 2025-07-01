@@ -4,7 +4,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Tabs},
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs},
 };
 
 use crate::slurm::squeue::SqueueOptions;
@@ -56,7 +56,7 @@ impl JobColumn {
     /// Get the format code for this column
     pub fn format_code(&self) -> &'static str {
         match self {
-            JobColumn::Id => "%A",         // Job ID - using %A for array job ID
+            JobColumn::Id => "%i",         // Job ID - using %A for array job ID
             JobColumn::Name => "%j",       // Job name
             JobColumn::User => "%u",       // User name
             JobColumn::State => "%T",      // Job state
@@ -122,16 +122,18 @@ impl JobColumn {
     /// Default columns to display
     pub fn defaults() -> Vec<JobColumn> {
         // These MUST match the defaults in App::new()
+        // "%i|%j|%u|%T|%M|%N|%C|%m|%P|%q".to_string(), // JobID|Name|User|State|Time|Nodes|CPUs|Memory|Partition|QOS
         vec![
             JobColumn::Id,
             JobColumn::Name,
             JobColumn::User,
             JobColumn::State,
-            JobColumn::Partition,
-            JobColumn::QoS,
+            JobColumn::Time,
             JobColumn::Nodes,
             JobColumn::CPUs,
-            JobColumn::Time,
+            JobColumn::Memory,
+            JobColumn::Partition,
+            JobColumn::QoS,
         ]
     }
 }
@@ -234,6 +236,8 @@ impl ColumnsPopup {
 
     /// Render the columns popup
     pub fn render(&mut self, frame: &mut Frame, area: Rect) {
+        // Render Clear first
+        frame.render_widget(Clear, area);
         // Create a block for the popup
         let block = Block::default()
             .title("Column Management")
@@ -762,9 +766,10 @@ impl ColumnsPopup {
     pub fn get_format_string(&self) -> String {
         if self.selected_columns.is_empty() {
             // Provide a default format if none selected
-            return "%A|%j|%u|%T|%P|%q|%D|%C|%M".to_string();
+            return "%i|%j|%u|%T|%M|%N|%C|%m|%P|%q".to_string();
         }
 
+        // Join all format codes with pipe separator
         self.selected_columns
             .iter()
             .map(|col| col.format_code())
@@ -776,7 +781,7 @@ impl ColumnsPopup {
     pub fn get_sort_string(&self) -> Option<String> {
         if self.sort_columns.is_empty() {
             // Default sort by job ID if none specified
-            return Some("A".to_string());
+            return Some("i".to_string());
         }
 
         Some(

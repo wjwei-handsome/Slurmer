@@ -186,13 +186,13 @@ impl App {
 
         // If job detail popup is visible, draw it
         if self.show_job_detail {
-            let popup_area = centered_popup_area(frame.size(), 80, 60);
+            let popup_area = centered_popup_area(frame.area(), 80, 60);
             self.render_job_detail(frame, popup_area);
         }
 
         // If columns popup is visible, draw it
         if self.show_columns_popup {
-            let popup_area = centered_popup_area(frame.size(), 80, 80);
+            let popup_area = centered_popup_area(frame.area(), 80, 80);
             self.columns_popup.render(frame, popup_area);
         }
     }
@@ -626,6 +626,9 @@ impl App {
             } else {
                 ""
             };
+            // actually, sort_code is just a single character
+            // remove % from the format code
+            let sort_code = sort_code.trim_start_matches('%');
             self.squeue_options.sort_by = Some(format!("{}{}", sort_direction, sort_code));
             self.squeue_options.sort_desc = matches!(first_sort.order, SortOrder::Descending);
 
@@ -650,6 +653,6 @@ impl App {
         }
 
         // Make sure the jobs are sorted according to our criteria
-        self.jobs_list.sort_jobs();
+        // self.jobs_list.sort_jobs();
     }
 }
