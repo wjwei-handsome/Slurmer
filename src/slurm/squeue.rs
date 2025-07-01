@@ -87,11 +87,8 @@ impl SqueueOptions {
             args.push(qos);
         }
 
-        // Name filter
-        if let Some(name) = &self.name_filter {
-            args.push("--name".to_string());
-            args.push(name.clone());
-        }
+        // Name filter is now handled internally by the application
+        // so we don't pass it to squeue
 
         // Format specification
         args.push("--format".to_string());
@@ -99,8 +96,9 @@ impl SqueueOptions {
 
         // Sort options
         if !self.sorts.is_empty() {
-            // 构建排序字符串: 格式为 "j,-i,+q" (按名称升序，ID降序，QOS升序)
-            let sort_string = self.sorts
+            // Create a sort string from the sorts map
+            let sort_string = self
+                .sorts
                 .iter()
                 .map(|(field, ascending)| {
                     let prefix = if *ascending { "" } else { "-" };
@@ -158,6 +156,8 @@ fn parse_squeue_output(output: &Output, format: &str) -> Result<Vec<Job>> {
     let lines: Vec<&str> = stdout.lines().collect();
 
     let mut jobs = Vec::new();
+
+    // Note: name_filter is now applied in App::refresh_jobs, not here
 
     // Handle empty output
     if stdout.trim().is_empty() {

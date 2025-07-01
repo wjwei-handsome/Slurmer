@@ -7,6 +7,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
 };
+use regex;
 use std::{
     error::Error,
     time::{Duration, Instant},
@@ -154,13 +155,43 @@ impl App {
 
         // Clone options after format has been updated
         let options = self.squeue_options.clone();
-        let jobs = self
+        let mut jobs = self
             .runtime
             .block_on(async { run_squeue(&options).await })?;
 
+        // Apply regex name filter if it exists
+        if let Some(name_filter) = &self.squeue_options.name_filter {
+            if !name_filter.is_empty() {
+                // Try to compile the regex pattern
+                match regex::Regex::new(name_filter) {
+                    Ok(re) => {
+                        // Filter jobs by name using regex
+                        let before_count = jobs.len();
+                        jobs.retain(|job| re.is_match(&job.name));
+                        let after_count = jobs.len();
+
+                        // Show filtering info if significant
+                        if before_count != after_count && before_count > 0 {
+                            let filter_pct = (after_count as f64 / before_count as f64) * 100.0;
+                            self.set_status_message(
+                                format!(
+                                    "Regex filtered: {}/{} jobs shown ({:.1}%)",
+                                    after_count, before_count, filter_pct
+                                ),
+                                3,
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        self.set_status_message(format!("Invalid regex pattern: {}", e), 3);
+                    }
+                }
+            }
+        }
+
         self.jobs_list.update_jobs(jobs);
-        self.set_status_message(format!("Loaded {} jobs", self.jobs_list.jobs.len()), 3);
         self.last_refresh = Instant::now();
+
         Ok(())
     }
 
@@ -529,8 +560,17 @@ impl App {
     }
 
     /// Set the job name filter
-    pub fn set_name_filter(&mut self, name: Option<String>) {
-        self.squeue_options.name_filter = name;
+    pub fn set_name_filter(&mut self, name: String) {
+        // Store the regex pattern as is - it will be applied in refresh_jobs
+        if name.is_empty() {
+            self.squeue_options.name_filter = None;
+        } else {
+            // Validate regex pattern
+            match regex::Regex::new(&name) {
+                Ok(_) => self.squeue_options.name_filter = Some(name),
+                Err(e) => self.set_status_message(format!("Invalid regex pattern: {}", e), 3),
+            }
+        }
     }
 
     /// Apply all filter changes and refresh jobs
@@ -545,16 +585,27 @@ impl App {
         if result.is_ok() {
             let filter_desc = self.get_filter_description();
             if !filter_desc.is_empty() {
-                self.set_status_message(format!("Filters applied: {}", filter_desc), 3);
+                let loaded_count = self.jobs_list.jobs.len();
+                self.set_status_message(
+                    format!(
+                        "Filters applied: {} ({} jobs shown)",
+                        filter_desc, loaded_count
+                    ),
+                    3,
+                );
             } else {
-                self.set_status_message("All filters cleared".to_string(), 3);
+                let loaded_count = self.jobs_list.jobs.len();
+                self.set_status_message(
+                    format!("Filters cleared ({} jobs shown)", loaded_count),
+                    3,
+                );
             }
         }
 
         result
     }
 
-    /// Get a human-readable description of current filters
+    /// Get a human-readable description of the current filters
     fn get_filter_description(&self) -> String {
         let mut parts = Vec::new();
 
@@ -563,33 +614,33 @@ impl App {
             parts.push(format!("user={}", user));
         }
 
-        // States filter
+        // State filters
         if !self.squeue_options.states.is_empty() {
             let states = self
                 .squeue_options
                 .states
                 .iter()
-                .map(|s| format!("{}", s))
+                .map(|s| s.to_string())
                 .collect::<Vec<_>>()
                 .join(",");
-            parts.push(format!("states={}", states));
+            parts.push(format!("state={}", states));
         }
 
-        // Partitions filter
+        // Partition filters
         if !self.squeue_options.partitions.is_empty() {
             let partitions = self.squeue_options.partitions.join(",");
-            parts.push(format!("partitions={}", partitions));
+            parts.push(format!("partition={}", partitions));
         }
 
-        // QOS filter
+        // QoS filters
         if !self.squeue_options.qos.is_empty() {
             let qos = self.squeue_options.qos.join(",");
             parts.push(format!("qos={}", qos));
         }
 
-        // Name filter
+        // Name filter (regex)
         if let Some(name) = &self.squeue_options.name_filter {
-            parts.push(format!("name={}", name));
+            parts.push(format!("name_regex={}", name));
         }
 
         parts.join(", ")
@@ -653,8 +704,5 @@ impl App {
             self.jobs_list.sort_column = 0;
             self.jobs_list.sort_ascending = true;
         }
-
-        // Make sure the jobs are sorted according to our criteria
-        // self.jobs_list.sort_jobs();
     }
 }

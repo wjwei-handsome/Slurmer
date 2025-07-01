@@ -45,14 +45,6 @@ impl JobsList {
         }
     }
 
-    /// Sort jobs based on current sort column and direction
-    /// This is just a placeholder since the actual sorting is handled by the Slurm squeue command
-    pub fn sort_jobs(&mut self) {
-        // No need to sort jobs manually
-        // The sorting is handled by Slurm's squeue command with the --sort parameter
-        // This function is kept for backward compatibility
-    }
-
     /// Toggle job selection
     pub fn toggle_select(&mut self) {
         if let Some(selected) = self.state.selected() {
@@ -265,27 +257,24 @@ impl JobsList {
         });
 
         // Calculate total available width
-        let available_width = area.width.saturating_sub(2); // Subtract 2 for borders
+        // let available_width = area.width.saturating_sub(2); // Subtract 2 for borders
 
-        // Get constraints for columns with improved layout
+        // Get constraints for columns using the default_width method from JobColumn
         let constraints: Vec<Constraint> = columns
             .iter()
-            .map(|col| match col {
-                JobColumn::Id => Constraint::Length(10),
-                JobColumn::Name => Constraint::Min(15),
-                JobColumn::User => Constraint::Length(10),
-                JobColumn::State => Constraint::Length(12),
-                JobColumn::Partition => Constraint::Length(12),
-                JobColumn::QoS => Constraint::Length(10),
-                JobColumn::Nodes => Constraint::Length(7),
-                JobColumn::CPUs => Constraint::Length(6),
-                JobColumn::Time => Constraint::Length(12),
-                JobColumn::Memory => Constraint::Length(10),
-                JobColumn::Account => Constraint::Length(12),
-                JobColumn::Priority => Constraint::Length(10),
-                JobColumn::WorkDir => Constraint::Min(20),
-                JobColumn::SubmitTime | JobColumn::StartTime | JobColumn::EndTime => {
-                    Constraint::Length(19)
+            .map(|col| {
+                // Use the default_width from JobColumn, but with some specific overrides
+                // for better display in the jobs list context
+                match col {
+                    // Override specific columns that need different constraints in the jobs list
+                    JobColumn::Name => Constraint::Min(15),
+                    JobColumn::WorkDir => Constraint::Min(20),
+                    // For time-related columns, we use a slightly longer constraint
+                    JobColumn::SubmitTime | JobColumn::StartTime | JobColumn::EndTime => {
+                        Constraint::Length(19)
+                    }
+                    // Use the default_width for all other columns
+                    _ => col.default_width(),
                 }
             })
             .collect();
@@ -294,7 +283,7 @@ impl JobsList {
         let table = Table::new(rows, constraints)
             .header(header)
             .block(Block::default().borders(Borders::ALL).title("Jobs"))
-            .highlight_style(Style::default().add_modifier(Modifier::BOLD))
+            .row_highlight_style(Style::default().add_modifier(Modifier::BOLD))
             .highlight_symbol(" > ");
 
         // Render the table

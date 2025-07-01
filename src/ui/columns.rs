@@ -1,13 +1,11 @@
-use crossterm::event::{KeyCode, KeyModifiers};
+use crossterm::event::KeyModifiers;
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    text::{Line, Span, Text},
+    text::Line,
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs},
 };
-
-use crate::slurm::squeue::SqueueOptions;
 
 /// Available columns for display in job list
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -78,22 +76,22 @@ impl JobColumn {
     /// Get the default width constraint for this column
     pub fn default_width(&self) -> Constraint {
         match self {
-            JobColumn::Id => Constraint::Length(8),
+            JobColumn::Id => Constraint::Length(10),
             JobColumn::Name => Constraint::Percentage(20),
             JobColumn::User => Constraint::Length(10),
-            JobColumn::State => Constraint::Length(10),
-            JobColumn::Partition => Constraint::Length(10),
-            JobColumn::QoS => Constraint::Length(8),
-            JobColumn::Nodes => Constraint::Length(6),
+            JobColumn::State => Constraint::Length(12),
+            JobColumn::Partition => Constraint::Length(12),
+            JobColumn::QoS => Constraint::Length(10),
+            JobColumn::Nodes => Constraint::Length(7),
             JobColumn::CPUs => Constraint::Length(6),
-            JobColumn::Time => Constraint::Length(10),
-            JobColumn::Memory => Constraint::Length(8),
-            JobColumn::Account => Constraint::Length(10),
-            JobColumn::Priority => Constraint::Length(8),
+            JobColumn::Time => Constraint::Length(12),
+            JobColumn::Memory => Constraint::Length(10),
+            JobColumn::Account => Constraint::Length(12),
+            JobColumn::Priority => Constraint::Length(10),
             JobColumn::WorkDir => Constraint::Percentage(15),
-            JobColumn::SubmitTime => Constraint::Length(16),
-            JobColumn::StartTime => Constraint::Length(16),
-            JobColumn::EndTime => Constraint::Length(16),
+            JobColumn::SubmitTime => Constraint::Length(19),
+            JobColumn::StartTime => Constraint::Length(19),
+            JobColumn::EndTime => Constraint::Length(19),
         }
     }
 
@@ -762,74 +760,21 @@ impl ColumnsPopup {
         }
     }
 
-    /// Get the squeue format string for the selected columns
-    pub fn get_format_string(&self) -> String {
-        if self.selected_columns.is_empty() {
-            // Provide a default format if none selected
-            return "%i|%j|%u|%T|%M|%N|%C|%m|%P|%q".to_string();
-        }
+    // /// Get the column constraints for the table
+    // pub fn get_column_constraints(&self) -> Vec<Constraint> {
+    //     if self.selected_columns.is_empty() {
+    //         // Return default constraints if no columns selected
+    //         return JobColumn::defaults()
+    //             .iter()
+    //             .map(|col| col.default_width())
+    //             .collect();
+    //     }
 
-        // Join all format codes with pipe separator
-        self.selected_columns
-            .iter()
-            .map(|col| col.format_code())
-            .collect::<Vec<_>>()
-            .join("|")
-    }
-
-    /// Get the squeue sort string for the sort columns
-    pub fn get_sort_string(&self) -> Option<String> {
-        if self.sort_columns.is_empty() {
-            // Default sort by job ID if none specified
-            return Some("i".to_string());
-        }
-
-        // 创建排序字符串：多列排序时用逗号分隔
-        // 排序方向通过前缀表示：无前缀表示升序，'-'前缀表示降序
-        // 例如：按名称升序、ID降序排序的格式为 "j,-i"
-        //
-        // Slurm squeue命令支持多列排序，排序优先级从左到右
-        // 例如 "--sort j,i" 表示先按名称排序，名称相同的再按ID排序
-        Some(
-            self.sort_columns
-                .iter()
-                .map(|sort_col| {
-                    let prefix = match sort_col.order {
-                        SortOrder::Ascending => "",
-                        SortOrder::Descending => "-",
-                    };
-                    // 提取不带%的格式代码作为Slurm排序键
-                    // 例如：%j -> j, %i -> i
-                    let code = sort_col.column.format_code().trim_start_matches('%');
-                    format!("{}{}", prefix, code)
-                })
-                .collect::<Vec<_>>()
-                .join(","),
-        )
-    }
-
-    /// Get the column constraints for the table
-    pub fn get_column_constraints(&self) -> Vec<Constraint> {
-        if self.selected_columns.is_empty() {
-            // Return default constraints if no columns selected
-            return vec![
-                Constraint::Length(8),      // ID
-                Constraint::Percentage(20), // Name
-                Constraint::Length(10),     // User
-                Constraint::Length(10),     // State
-                Constraint::Length(10),     // Partition
-                Constraint::Length(8),      // QoS
-                Constraint::Length(6),      // Nodes
-                Constraint::Length(6),      // CPUs
-                Constraint::Length(10),     // Time
-            ];
-        }
-
-        self.selected_columns
-            .iter()
-            .map(|col| col.default_width())
-            .collect()
-    }
+    //     self.selected_columns
+    //         .iter()
+    //         .map(|col| col.default_width())
+    //         .collect()
+    // }
 }
 
 /// Action to take after handling a key in the columns popup

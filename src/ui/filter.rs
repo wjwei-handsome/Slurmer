@@ -1,9 +1,9 @@
 use crossterm::event::KeyModifiers;
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout, Position, Rect},
     style::{Color, Modifier, Style},
-    text::{Line, Span},
+    text::Line,
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs},
 };
 
@@ -27,6 +27,8 @@ pub struct FilterPopup {
     pub qos_list_state: ListState,
     /// Job name regex filter
     pub name_filter: String,
+    /// Whether the current regex is valid
+    pub regex_valid: Option<bool>,
 }
 
 /// Which field is currently focused in the filter popup
@@ -62,6 +64,7 @@ impl FilterPopup {
             partition_list_state,
             qos_list_state,
             name_filter: String::new(),
+            regex_valid: None,
         }
     }
 
@@ -69,6 +72,26 @@ impl FilterPopup {
     pub fn initialize(&mut self, options: &SqueueOptions) {
         self.username = options.user.clone().unwrap_or_default();
         self.name_filter = options.name_filter.clone().unwrap_or_default();
+
+        // Validate regex if name_filter is not empty
+        if !self.name_filter.is_empty() {
+            self.validate_regex();
+        } else {
+            self.regex_valid = None;
+        }
+    }
+
+    /// Validate the current regex pattern
+    fn validate_regex(&mut self) {
+        if self.name_filter.is_empty() {
+            self.regex_valid = None;
+            return;
+        }
+
+        match regex::Regex::new(&self.name_filter) {
+            Ok(_) => self.regex_valid = Some(true),
+            Err(_) => self.regex_valid = Some(false),
+        }
     }
 
     /// Render the filter popup
@@ -159,14 +182,25 @@ impl FilterPopup {
         frame.render_widget(username_text, chunks[0]);
 
         // Job name filter field
+        // Show validation status in the title
+        let title = match self.regex_valid {
+            Some(true) => "Job Name Filter (regex) ✓",
+            Some(false) => "Job Name Filter (regex) ✗ Invalid",
+            None => "Job Name Filter (regex)",
+        };
+
+        // Set color based on validation status
+        let block_style = match (self.focus == FilterFocus::NameFilter, self.regex_valid) {
+            (true, _) => Style::default().fg(Color::Cyan),
+            (false, Some(true)) => Style::default(),
+            (false, Some(false)) => Style::default().fg(Color::Red),
+            (false, None) => Style::default(),
+        };
+
         let name_filter_block = Block::default()
-            .title("Job Name Filter (regex)")
+            .title(title)
             .borders(Borders::ALL)
-            .style(if self.focus == FilterFocus::NameFilter {
-                Style::default().fg(Color::Cyan)
-            } else {
-                Style::default()
-            });
+            .style(block_style);
 
         let name_filter_text = Paragraph::new(self.name_filter.clone()).block(name_filter_block);
 
@@ -187,7 +221,10 @@ impl FilterPopup {
             };
 
             if cursor_position != (0, 0) {
-                frame.set_cursor(cursor_position.0, cursor_position.1);
+                frame.set_cursor_position(Position {
+                    x: cursor_position.0,
+                    y: cursor_position.1,
+                });
             }
         }
     }
@@ -440,13 +477,28 @@ impl FilterPopup {
                             options.user = None;
                         }
 
+                        // Validate regex pattern before applying
                         if !self.name_filter.is_empty() {
-                            options.name_filter = Some(self.name_filter.clone());
+                            // Check if pattern is valid
+                            match regex::Regex::new(&self.name_filter) {
+                                Ok(_) => {
+                                    // Valid regex pattern
+                                    options.name_filter = Some(self.name_filter.clone());
+                                    self.regex_valid = Some(true);
+                                    FilterAction::Apply
+                                }
+                                Err(_) => {
+                                    // Invalid regex pattern - don't apply filters
+                                    self.regex_valid = Some(false);
+                                    // Return None to stay in the filter popup
+                                    FilterAction::None
+                                }
+                            }
                         } else {
                             options.name_filter = None;
+                            self.regex_valid = None;
+                            FilterAction::Apply
                         }
-
-                        FilterAction::Apply
                     }
                     FilterFocus::CancelButton => FilterAction::Close,
                 }
@@ -539,11 +591,14 @@ impl FilterPopup {
                         }
                     }
                     FilterFocus::NameFilter => {
+                        // Only set name_filter if regex is valid or empty
                         if self.name_filter.is_empty() {
                             options.name_filter = None;
-                        } else {
+                            self.regex_valid = None;
+                        } else if self.regex_valid == Some(true) {
                             options.name_filter = Some(self.name_filter.clone());
                         }
+                        // If invalid, leave the existing filter unchanged
                     }
                     _ => {}
                 }
@@ -556,7 +611,10 @@ impl FilterPopup {
                 // Add character to input
                 match self.focus {
                     FilterFocus::Username => self.username.push(c),
-                    FilterFocus::NameFilter => self.name_filter.push(c),
+                    FilterFocus::NameFilter => {
+                        self.name_filter.push(c);
+                        self.validate_regex();
+                    }
                     _ => {}
                 }
                 FilterAction::None
@@ -569,6 +627,7 @@ impl FilterPopup {
                     }
                     FilterFocus::NameFilter => {
                         let _ = self.name_filter.pop();
+                        self.validate_regex();
                     }
                     _ => {}
                 }
