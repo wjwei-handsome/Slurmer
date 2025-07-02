@@ -191,8 +191,6 @@ pub enum ColumnsFocus {
 
 /// Columns management popup state
 pub struct ColumnsPopup {
-    /// Current tab index
-    pub tab_index: usize,
     /// Focus in the popup
     pub focus: ColumnsFocus,
     /// Available columns list state
@@ -231,7 +229,6 @@ impl ColumnsPopup {
         }
 
         Self {
-            tab_index: 0,
             focus: ColumnsFocus::SelectedColumns,
             available_columns_state,
             selected_columns_state,
@@ -259,44 +256,28 @@ impl ColumnsPopup {
             .direction(Direction::Vertical)
             .margin(1)
             .constraints([
-                Constraint::Length(3), // Tabs
                 Constraint::Min(5),    // Content
                 Constraint::Length(3), // Buttons
             ])
             .split(area);
 
-        // Create the tabs
-        let tabs = Tabs::new(vec![
-            Line::from("[1] Available/Selected"),
-            Line::from("[2] Sort Order"),
-        ])
-        .block(Block::default().borders(Borders::BOTTOM))
-        .select(self.tab_index)
-        .highlight_style(
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        );
-
-        frame.render_widget(tabs, inner_area[0]);
-
-        // Render content based on selected tab
-        match self.tab_index {
-            0 => self.render_columns_tab(frame, inner_area[1]),
-            1 => self.render_sort_tab(frame, inner_area[1]),
-            _ => {}
-        }
+        // Render the unified three-column view
+        self.render_unified_columns_view(frame, inner_area[0]);
 
         // Render buttons
-        self.render_buttons(frame, inner_area[2]);
+        self.render_buttons(frame, inner_area[1]);
     }
 
     /// Render the columns tab (available and selected columns)
-    fn render_columns_tab(&mut self, frame: &mut Frame, area: Rect) {
-        // Split the area into two columns
+    fn render_unified_columns_view(&mut self, frame: &mut Frame, area: Rect) {
+        // Split the area into three columns
         let columns = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .constraints([
+                Constraint::Percentage(33),
+                Constraint::Percentage(33),
+                Constraint::Percentage(34),
+            ])
             .split(area);
 
         // Available columns list
@@ -347,20 +328,6 @@ impl ColumnsPopup {
 
         frame.render_stateful_widget(selected_list, columns[1], &mut self.selected_columns_state);
 
-        // Show help text
-        let help_area = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Min(1), Constraint::Length(2)])
-            .split(area)[1];
-
-        let help_text = "Enter: Add/Remove column | ↑/↓: Navigate | ←/→: Switch lists | Space: Move up/down | t: Switch tabs";
-        let help = Paragraph::new(help_text).style(Style::default().fg(Color::Gray));
-
-        frame.render_widget(help, help_area);
-    }
-
-    /// Render the sort tab
-    fn render_sort_tab(&mut self, frame: &mut Frame, area: Rect) {
         // Sort columns list
         let sort_block = Block::default()
             .title("Sort Order")
@@ -387,16 +354,26 @@ impl ColumnsPopup {
             .block(sort_block)
             .highlight_style(Style::default().add_modifier(Modifier::BOLD));
 
-        frame.render_stateful_widget(sort_list, area, &mut self.sort_columns_state);
+        frame.render_stateful_widget(sort_list, columns[2], &mut self.sort_columns_state);
 
-        // Show help text at the bottom
-        // Show help text at the bottom
+        // Show help text
         let help_area = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Min(1), Constraint::Length(2)])
             .split(area)[1];
 
-        let help_text = "Enter: Add column to sort | Space: Toggle sort order | Delete: Remove column from sort | t: Switch tabs";
+        let help_text = match self.focus {
+            ColumnsFocus::AvailableColumns => {
+                "↑/↓: Navigate | →: Switch to Selected | Enter: Add column to Selected"
+            }
+            ColumnsFocus::SelectedColumns => {
+                "↑/↓: Navigate | ←/→: Switch lists | Enter: Add to Sort | Del: Remove | Ctrl+↑/↓: Move up/down"
+            }
+            ColumnsFocus::SortColumns => {
+                "↑/↓: Navigate | ←: Switch to Selected | Enter/Space: Toggle order | Del: Remove | Ctrl+↑/↓: Move up/down"
+            }
+            _ => "",
+        };
         let help = Paragraph::new(help_text).style(Style::default().fg(Color::Gray));
 
         frame.render_widget(help, help_area);
@@ -468,27 +445,36 @@ impl ColumnsPopup {
                 self.cycle_focus();
                 return ColumnsAction::None;
             }
-            // Handle tab switching with dedicated keys (Tab key won't work in TUI)
-            KeyCode::Char('t') => {
-                // Toggle between tabs
-                self.tab_index = (self.tab_index + 1) % 2;
-                self.update_focus_for_tab();
-                return ColumnsAction::None;
-            }
-            KeyCode::Left | KeyCode::Right => {
-                if (self.focus == ColumnsFocus::AvailableColumns
-                    || self.focus == ColumnsFocus::SelectedColumns)
-                    && self.tab_index == 0
-                {
-                    // Switch between available and selected columns
-                    if self.focus == ColumnsFocus::AvailableColumns && key.code == KeyCode::Right {
-                        self.focus = ColumnsFocus::SelectedColumns;
-                    } else if self.focus == ColumnsFocus::SelectedColumns
-                        && key.code == KeyCode::Left
-                    {
+            KeyCode::Left => {
+                // Navigate left between columns
+                match self.focus {
+                    ColumnsFocus::SelectedColumns => {
                         self.focus = ColumnsFocus::AvailableColumns;
+                        self.update_selections();
+                        return ColumnsAction::None;
                     }
-                    return ColumnsAction::None;
+                    ColumnsFocus::SortColumns => {
+                        self.focus = ColumnsFocus::SelectedColumns;
+                        self.update_selections();
+                        return ColumnsAction::None;
+                    }
+                    _ => {}
+                }
+            }
+            KeyCode::Right => {
+                // Navigate right between columns
+                match self.focus {
+                    ColumnsFocus::AvailableColumns => {
+                        self.focus = ColumnsFocus::SelectedColumns;
+                        self.update_selections();
+                        return ColumnsAction::None;
+                    }
+                    ColumnsFocus::SelectedColumns => {
+                        self.focus = ColumnsFocus::SortColumns;
+                        self.update_selections();
+                        return ColumnsAction::None;
+                    }
+                    _ => {}
                 }
             }
             // F10 or Ctrl+S to save settings
@@ -496,35 +482,25 @@ impl ColumnsPopup {
             KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 return ColumnsAction::SaveAndApply;
             }
-            // Number keys to switch tabs directly
-            KeyCode::Char('1') => {
-                self.tab_index = 0;
-                self.update_focus_for_tab();
-                return ColumnsAction::None;
-            }
-            KeyCode::Char('2') => {
-                self.tab_index = 1;
-                self.update_focus_for_tab();
-                return ColumnsAction::None;
-            }
             _ => {}
         }
 
-        // Handle tab-specific actions
-        match self.tab_index {
-            0 => self.handle_columns_tab_key(key),
-            1 => self.handle_sort_tab_key(key),
-            _ => ColumnsAction::None,
+        // Handle actions based on which column has focus
+        match self.focus {
+            ColumnsFocus::AvailableColumns => self.handle_available_columns_key(key),
+            ColumnsFocus::SelectedColumns => self.handle_selected_columns_key(key),
+            ColumnsFocus::SortColumns => self.handle_sort_columns_key(key),
+            _ => self.handle_button_key(key),
         }
     }
 
-    /// Handle keys in the columns tab
-    fn handle_columns_tab_key(&mut self, key: crossterm::event::KeyEvent) -> ColumnsAction {
+    /// Handle keys for available columns
+    fn handle_available_columns_key(&mut self, key: crossterm::event::KeyEvent) -> ColumnsAction {
         use crossterm::event::KeyCode;
 
-        match (self.focus, key.code) {
+        match key.code {
             // Navigate available columns
-            (ColumnsFocus::AvailableColumns, KeyCode::Up) => {
+            KeyCode::Up => {
                 if let Some(selected) = self.available_columns_state.selected() {
                     if selected > 0 {
                         self.available_columns_state.select(Some(selected - 1));
@@ -532,7 +508,7 @@ impl ColumnsPopup {
                 }
                 ColumnsAction::None
             }
-            (ColumnsFocus::AvailableColumns, KeyCode::Down) => {
+            KeyCode::Down => {
                 if let Some(selected) = self.available_columns_state.selected() {
                     if selected < self.available_columns.len().saturating_sub(1) {
                         self.available_columns_state.select(Some(selected + 1));
@@ -541,9 +517,10 @@ impl ColumnsPopup {
                 ColumnsAction::None
             }
             // Add column to selected
-            (ColumnsFocus::AvailableColumns, KeyCode::Enter) => {
+            KeyCode::Enter => {
                 if let Some(selected) = self.available_columns_state.selected() {
-                    if selected < self.available_columns.len() {
+                    if !self.available_columns.is_empty() && selected < self.available_columns.len()
+                    {
                         let column = self.available_columns.remove(selected);
                         self.selected_columns.push(column);
 
@@ -562,30 +539,71 @@ impl ColumnsPopup {
                 }
                 ColumnsAction::None
             }
+            _ => ColumnsAction::None,
+        }
+    }
 
+    /// Handle keys for selected columns
+    fn handle_selected_columns_key(&mut self, key: crossterm::event::KeyEvent) -> ColumnsAction {
+        use crossterm::event::KeyCode;
+        use crossterm::event::KeyModifiers;
+
+        match key.code {
             // Navigate selected columns
-            (ColumnsFocus::SelectedColumns, KeyCode::Up) => {
+            KeyCode::Up => {
                 if let Some(selected) = self.selected_columns_state.selected() {
                     if selected > 0 {
+                        if key.modifiers.contains(KeyModifiers::SHIFT) {
+                            // Move column up
+                            self.selected_columns.swap(selected, selected - 1);
+                        }
                         self.selected_columns_state.select(Some(selected - 1));
                     }
                 }
                 ColumnsAction::None
             }
-            (ColumnsFocus::SelectedColumns, KeyCode::Down) => {
+            KeyCode::Down => {
                 if let Some(selected) = self.selected_columns_state.selected() {
                     if selected < self.selected_columns.len().saturating_sub(1) {
+                        if key.modifiers.contains(KeyModifiers::SHIFT) {
+                            // Move column down
+                            self.selected_columns.swap(selected, selected + 1);
+                        }
                         self.selected_columns_state.select(Some(selected + 1));
                     }
                 }
                 ColumnsAction::None
             }
+            // Add column to sort
+            KeyCode::Enter => {
+                if let Some(selected) = self.selected_columns_state.selected() {
+                    if !self.selected_columns.is_empty() && selected < self.selected_columns.len() {
+                        let column = self.selected_columns[selected];
+
+                        // Check if the column is already in sort_columns
+                        if !self.sort_columns.iter().any(|sc| sc.column == column) {
+                            self.sort_columns.push(SortColumn {
+                                column,
+                                order: SortOrder::Ascending,
+                            });
+
+                            // Select the newly added sort column
+                            self.sort_columns_state
+                                .select(Some(self.sort_columns.len() - 1));
+                        }
+                    }
+                }
+                ColumnsAction::None
+            }
             // Remove column from selected
-            (ColumnsFocus::SelectedColumns, KeyCode::Enter) => {
+            KeyCode::Delete | KeyCode::Backspace => {
                 if let Some(selected) = self.selected_columns_state.selected() {
                     if !self.selected_columns.is_empty() && selected < self.selected_columns.len() {
                         let column = self.selected_columns.remove(selected);
                         self.available_columns.push(column);
+
+                        // Also remove from sort if present
+                        self.sort_columns.retain(|sc| sc.column != column);
 
                         // Adjust selection if needed
                         if self.selected_columns.is_empty() {
@@ -602,42 +620,19 @@ impl ColumnsPopup {
                 }
                 ColumnsAction::None
             }
-            // Move selected column up/down
-            (ColumnsFocus::SelectedColumns, KeyCode::Char(' ')) => {
-                if let Some(selected) = self.selected_columns_state.selected() {
-                    if key.modifiers.contains(KeyModifiers::SHIFT) {
-                        // Move up
-                        if selected > 0 {
-                            self.selected_columns.swap(selected, selected - 1);
-                            self.selected_columns_state.select(Some(selected - 1));
-                        }
-                    } else {
-                        // Move down
-                        if selected < self.selected_columns.len().saturating_sub(1) {
-                            self.selected_columns.swap(selected, selected + 1);
-                            self.selected_columns_state.select(Some(selected + 1));
-                        }
-                    }
-                }
-                ColumnsAction::None
-            }
-
-            // Handle button actions
-            (ColumnsFocus::SaveButton, KeyCode::Enter) => ColumnsAction::SaveAndApply,
-            (ColumnsFocus::ApplyButton, KeyCode::Enter) => ColumnsAction::Apply,
-            (ColumnsFocus::CancelButton, KeyCode::Enter) => ColumnsAction::Close,
 
             _ => ColumnsAction::None,
         }
     }
 
-    /// Handle keys in the sort tab
-    fn handle_sort_tab_key(&mut self, key: crossterm::event::KeyEvent) -> ColumnsAction {
+    /// Handle keys for sort columns
+    fn handle_sort_columns_key(&mut self, key: crossterm::event::KeyEvent) -> ColumnsAction {
         use crossterm::event::KeyCode;
+        use crossterm::event::KeyModifiers;
 
-        match (self.focus, key.code) {
+        match key.code {
             // Navigate sort columns
-            (ColumnsFocus::SortColumns, KeyCode::Up) => {
+            KeyCode::Up => {
                 if let Some(selected) = self.sort_columns_state.selected() {
                     if selected > 0 {
                         self.sort_columns_state.select(Some(selected - 1));
@@ -645,7 +640,7 @@ impl ColumnsPopup {
                 }
                 ColumnsAction::None
             }
-            (ColumnsFocus::SortColumns, KeyCode::Down) => {
+            KeyCode::Down => {
                 if let Some(selected) = self.sort_columns_state.selected() {
                     if selected < self.sort_columns.len().saturating_sub(1) {
                         self.sort_columns_state.select(Some(selected + 1));
@@ -654,7 +649,7 @@ impl ColumnsPopup {
                 ColumnsAction::None
             }
             // Toggle sort order
-            (ColumnsFocus::SortColumns, KeyCode::Char(' ')) => {
+            KeyCode::Char(' ') | KeyCode::Enter => {
                 if let Some(selected) = self.sort_columns_state.selected() {
                     if selected < self.sort_columns.len() {
                         self.sort_columns[selected].order =
@@ -664,7 +659,7 @@ impl ColumnsPopup {
                 ColumnsAction::None
             }
             // Remove sort column
-            (ColumnsFocus::SortColumns, KeyCode::Delete | KeyCode::Backspace) => {
+            KeyCode::Delete | KeyCode::Backspace => {
                 if let Some(selected) = self.sort_columns_state.selected() {
                     if !self.sort_columns.is_empty() && selected < self.sort_columns.len() {
                         self.sort_columns.remove(selected);
@@ -680,37 +675,37 @@ impl ColumnsPopup {
                 }
                 ColumnsAction::None
             }
-            // Add column to sort
-            (ColumnsFocus::SortColumns, KeyCode::Enter) => {
-                // Show a submenu to select which column to add for sorting
-                // For now, we'll just add the first selected column if it's not already in sort
-                if !self.selected_columns.is_empty() {
-                    if let Some(selected) = self.selected_columns_state.selected() {
-                        if selected < self.selected_columns.len() {
-                            let column = self.selected_columns[selected];
-
-                            // Check if the column is already in sort_columns
-                            if !self.sort_columns.iter().any(|sc| sc.column == column) {
-                                self.sort_columns.push(SortColumn {
-                                    column,
-                                    order: SortOrder::Ascending,
-                                });
-
-                                // Select the newly added sort column
-                                self.sort_columns_state
-                                    .select(Some(self.sort_columns.len() - 1));
-                            }
-                        }
+            // Move sort column up/down with Ctrl+Up/Down
+            KeyCode::Up if key.modifiers.contains(KeyModifiers::ALT) => {
+                if let Some(selected) = self.sort_columns_state.selected() {
+                    if selected > 0 {
+                        self.sort_columns.swap(selected, selected - 1);
+                        self.sort_columns_state.select(Some(selected - 1));
                     }
                 }
                 ColumnsAction::None
             }
+            KeyCode::Down if key.modifiers.contains(KeyModifiers::ALT) => {
+                if let Some(selected) = self.sort_columns_state.selected() {
+                    if selected < self.sort_columns.len().saturating_sub(1) {
+                        self.sort_columns.swap(selected, selected + 1);
+                        self.sort_columns_state.select(Some(selected + 1));
+                    }
+                }
+                ColumnsAction::None
+            }
+            _ => ColumnsAction::None,
+        }
+    }
 
-            // Handle button actions
+    /// Handle button key events
+    fn handle_button_key(&mut self, key: crossterm::event::KeyEvent) -> ColumnsAction {
+        use crossterm::event::KeyCode;
+
+        match (self.focus, key.code) {
             (ColumnsFocus::SaveButton, KeyCode::Enter) => ColumnsAction::SaveAndApply,
             (ColumnsFocus::ApplyButton, KeyCode::Enter) => ColumnsAction::Apply,
             (ColumnsFocus::CancelButton, KeyCode::Enter) => ColumnsAction::Close,
-
             _ => ColumnsAction::None,
         }
     }
@@ -726,44 +721,24 @@ impl ColumnsPopup {
             ColumnsFocus::CancelButton => self.focus = ColumnsFocus::AvailableColumns,
         }
 
-        self.update_focus_for_tab();
+        self.update_selections();
     }
 
-    /// Update focus to match the current tab
-    fn update_focus_for_tab(&mut self) {
-        match self.tab_index {
-            0 => {
-                // In the columns tab, only available/selected columns or buttons are valid
-                match self.focus {
-                    ColumnsFocus::SortColumns => self.focus = ColumnsFocus::SelectedColumns,
-                    _ => {}
-                }
-            }
-            1 => {
-                // In the sort tab, only sort columns or buttons are valid
-                match self.focus {
-                    ColumnsFocus::AvailableColumns | ColumnsFocus::SelectedColumns => {
-                        self.focus = ColumnsFocus::SortColumns
-                    }
-                    _ => {}
-                }
-            }
-            _ => {}
-        }
-
-        // Ensure we have a valid selection in list states based on current focus
+    /// Update selections when focus changes
+    fn update_selections(&mut self) {
+        // Update list selections based on focus
         if self.focus == ColumnsFocus::AvailableColumns
-            && self.available_columns.len() > 0
+            && !self.available_columns.is_empty()
             && self.available_columns_state.selected().is_none()
         {
             self.available_columns_state.select(Some(0));
         } else if self.focus == ColumnsFocus::SelectedColumns
-            && self.selected_columns.len() > 0
+            && !self.selected_columns.is_empty()
             && self.selected_columns_state.selected().is_none()
         {
             self.selected_columns_state.select(Some(0));
         } else if self.focus == ColumnsFocus::SortColumns
-            && self.sort_columns.len() > 0
+            && !self.sort_columns.is_empty()
             && self.sort_columns_state.selected().is_none()
         {
             self.sort_columns_state.select(Some(0));
