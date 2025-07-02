@@ -156,7 +156,7 @@ impl FilterPopup {
 
         // Create the tabs
         let tabs = Tabs::new(vec![
-            Line::from("User & Name"),
+            Line::from("User & Name & Node"),
             Line::from("States"),
             Line::from("Partitions"),
             Line::from("QoS"),
@@ -460,7 +460,7 @@ impl FilterPopup {
                     self.input_mode = false;
                 } else {
                     // Cycle through focusable elements
-                    // self.cycle_focus();
+                    self.cycle_focus();
                 }
                 return FilterAction::None;
             }
@@ -572,17 +572,28 @@ impl FilterPopup {
                         if selected > 0 {
                             self.state_list_state.select(Some(selected - 1));
                         }
+                        if selected == 0 {
+                            // If already at the top, move to bottom
+                            self.state_list_state.select(Some(all_states.len() - 1));
+                        }
                     }
                     FilterFocus::Partitions => {
                         let selected = self.partition_list_state.selected().unwrap_or(0);
                         if selected > 0 {
                             self.partition_list_state.select(Some(selected - 1));
                         }
+                        if selected == 0 {
+                            self.partition_list_state
+                                .select(Some(all_partitions.len() - 1));
+                        }
                     }
                     FilterFocus::QoS => {
                         let selected = self.qos_list_state.selected().unwrap_or(0);
                         if selected > 0 {
                             self.qos_list_state.select(Some(selected - 1));
+                        }
+                        if selected == 0 {
+                            self.qos_list_state.select(Some(all_qos.len() - 1));
                         }
                     }
                     FilterFocus::NodeFilter => {
@@ -597,6 +608,10 @@ impl FilterPopup {
                         // Move focus to node filter from buttons
                         self.focus = FilterFocus::NodeFilter;
                     }
+                    FilterFocus::Username => {
+                        // If already at the top, move to the last focusable element
+                        self.focus = FilterFocus::NodeFilter;
+                    }
                     _ => {}
                 }
                 FilterAction::None
@@ -608,11 +623,18 @@ impl FilterPopup {
                         if selected < all_states.len() - 1 {
                             self.state_list_state.select(Some(selected + 1));
                         }
+                        if selected == all_states.len() - 1 {
+                            // If already at the bottom, move to top
+                            self.state_list_state.select(Some(0));
+                        }
                     }
                     FilterFocus::Partitions => {
                         let selected = self.partition_list_state.selected().unwrap_or(0);
                         if selected < all_partitions.len() - 1 {
                             self.partition_list_state.select(Some(selected + 1));
+                        }
+                        if selected == all_partitions.len() - 1 {
+                            self.partition_list_state.select(Some(0));
                         }
                     }
                     FilterFocus::QoS => {
@@ -620,27 +642,18 @@ impl FilterPopup {
                         if selected < all_qos.len() - 1 {
                             self.qos_list_state.select(Some(selected + 1));
                         }
+                        if selected == all_qos.len() - 1 {
+                            self.qos_list_state.select(Some(0));
+                        }
                     }
                     FilterFocus::Username => {
-                        // Move focus to the name filter if down is pressed in the username field
-                        if self.input_mode {
-                            self.input_mode = false;
-                        }
                         self.focus = FilterFocus::NameFilter;
                     }
                     FilterFocus::NameFilter => {
-                        // Move focus to the node filter if down is pressed in the name filter
-                        if self.input_mode {
-                            self.input_mode = false;
-                        }
                         self.focus = FilterFocus::NodeFilter;
                     }
                     FilterFocus::NodeFilter => {
-                        // Move focus to the apply button if down is pressed in the node filter
-                        if self.input_mode {
-                            self.input_mode = false;
-                        }
-                        self.focus = FilterFocus::ApplyButton;
+                        self.focus = FilterFocus::Username;
                     }
                     _ => {}
                 }
@@ -651,16 +664,28 @@ impl FilterPopup {
                 if self.tab_index > 0 {
                     self.tab_index -= 1;
                     self.update_focus_for_tab();
+                    return FilterAction::None;
+                } else if self.tab_index == 0 {
+                    self.tab_index = 3; // Wrap around to last tab
+                    self.update_focus_for_tab();
+                    return FilterAction::None;
+                } else {
+                    return FilterAction::None; // No change if already at first tab
                 }
-                FilterAction::None
             }
             KeyCode::Right => {
                 // Change tab
                 if self.tab_index < 3 {
                     self.tab_index += 1;
                     self.update_focus_for_tab();
+                    return FilterAction::None;
+                } else if self.tab_index == 3 {
+                    self.tab_index = 0; // Wrap around to first tab
+                    self.update_focus_for_tab();
+                    return FilterAction::None;
+                } else {
+                    return FilterAction::None; // No change if already at last tab
                 }
-                FilterAction::None
             }
             _ => FilterAction::None,
         }
@@ -746,6 +771,30 @@ impl FilterPopup {
                 }
                 FilterAction::None
             }
+            KeyCode::Up => {
+                //quit input mode and cycle focus up
+                self.input_mode = false;
+                // Cycle focus up
+                match self.focus {
+                    FilterFocus::Username => self.focus = FilterFocus::NodeFilter,
+                    FilterFocus::NameFilter => self.focus = FilterFocus::Username,
+                    FilterFocus::NodeFilter => self.focus = FilterFocus::NameFilter,
+                    _ => {}
+                }
+                FilterAction::None
+            }
+            KeyCode::Down => {
+                //quit input mode and cycle focus down
+                self.input_mode = false;
+                // Cycle focus down
+                match self.focus {
+                    FilterFocus::Username => self.focus = FilterFocus::NameFilter,
+                    FilterFocus::NameFilter => self.focus = FilterFocus::NodeFilter,
+                    FilterFocus::NodeFilter => self.focus = FilterFocus::Username,
+                    _ => {}
+                }
+                FilterAction::None
+            }
             _ => FilterAction::None,
         }
     }
@@ -801,7 +850,11 @@ impl FilterPopup {
             0 => {
                 // User tab
                 match self.focus {
-                    FilterFocus::States | FilterFocus::Partitions | FilterFocus::QoS => {
+                    FilterFocus::States
+                    | FilterFocus::Partitions
+                    | FilterFocus::QoS
+                    | FilterFocus::ApplyButton
+                    | FilterFocus::CancelButton => {
                         self.focus = FilterFocus::Username;
                     }
                     _ => {}
@@ -814,7 +867,9 @@ impl FilterPopup {
                     | FilterFocus::NameFilter
                     | FilterFocus::NodeFilter
                     | FilterFocus::Partitions
-                    | FilterFocus::QoS => {
+                    | FilterFocus::QoS
+                    | FilterFocus::ApplyButton
+                    | FilterFocus::CancelButton => {
                         self.focus = FilterFocus::States;
                     }
                     _ => {}
@@ -827,7 +882,9 @@ impl FilterPopup {
                     | FilterFocus::NameFilter
                     | FilterFocus::NodeFilter
                     | FilterFocus::States
-                    | FilterFocus::QoS => {
+                    | FilterFocus::QoS
+                    | FilterFocus::ApplyButton
+                    | FilterFocus::CancelButton => {
                         self.focus = FilterFocus::Partitions;
                     }
                     _ => {}
@@ -840,7 +897,9 @@ impl FilterPopup {
                     | FilterFocus::NameFilter
                     | FilterFocus::NodeFilter
                     | FilterFocus::States
-                    | FilterFocus::Partitions => {
+                    | FilterFocus::Partitions
+                    | FilterFocus::ApplyButton
+                    | FilterFocus::CancelButton => {
                         self.focus = FilterFocus::QoS;
                     }
                     _ => {}
