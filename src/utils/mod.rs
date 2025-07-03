@@ -1,5 +1,6 @@
 pub mod command;
 pub mod event;
+pub mod file_watcher;
 
 /// Returns the current username from the environment
 pub fn get_username() -> String {

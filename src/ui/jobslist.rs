@@ -99,8 +99,14 @@ impl JobsList {
     }
 
     /// Navigate to next job
-    pub fn next(&mut self) {
-        let i = match self.state.selected() {
+    /// Returns true if selection changed, false otherwise
+    pub fn next(&mut self) -> bool {
+        if self.jobs.is_empty() {
+            return false;
+        }
+
+        let old_selection = self.state.selected();
+        let i = match old_selection {
             Some(i) => {
                 if i >= self.jobs.len().saturating_sub(1) {
                     0
@@ -111,11 +117,18 @@ impl JobsList {
             None => 0,
         };
         self.state.select(Some(i));
+        old_selection != Some(i)
     }
 
     /// Navigate to previous job
-    pub fn previous(&mut self) {
-        let i = match self.state.selected() {
+    /// Returns true if selection changed, false otherwise
+    pub fn previous(&mut self) -> bool {
+        if self.jobs.is_empty() {
+            return false;
+        }
+
+        let old_selection = self.state.selected();
+        let i = match old_selection {
             Some(i) => {
                 if i == 0 {
                     self.jobs.len().saturating_sub(1)
@@ -126,6 +139,7 @@ impl JobsList {
             None => 0,
         };
         self.state.select(Some(i));
+        old_selection != Some(i)
     }
 
     /// Draw the jobs list widget

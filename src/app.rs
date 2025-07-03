@@ -10,6 +10,8 @@ use ratatui::{
 use regex;
 use std::{
     error::Error,
+    path::PathBuf,
+    sync::Arc,
     time::{Duration, Instant},
 };
 use tokio::runtime::Runtime;
@@ -24,9 +26,11 @@ use crate::{
         filter::{FilterAction, FilterPopup},
         jobslist::JobsList,
         layout::{centered_popup_area, draw_main_layout},
+        logview::{LogTab, LogView},
     },
     utils::{
         event::{Event as AppEvent, EventConfig, EventHandler},
+        file_watcher::{FileContent, FileWatcherError, FileWatcherHandle},
         get_username,
     },
 };
@@ -55,6 +59,8 @@ pub struct App {
     pub show_columns_popup: bool,
     /// Columns popup state
     pub columns_popup: ColumnsPopup,
+    /// Log view state
+    pub log_view: LogView,
     /// Status message to display in the status bar
     pub status_message: String,
     /// Status message display timeout
@@ -111,6 +117,7 @@ impl App {
             show_job_detail: false,
             show_columns_popup: false,
             columns_popup: ColumnsPopup::new(selected_columns.clone(), sort_columns.clone()),
+            log_view: LogView::new(),
             status_message: String::new(),
             status_timeout: None,
             refresh_interval: 10, // Default to 10 seconds refresh
@@ -261,6 +268,8 @@ impl App {
         self.render_header(frame, areas[0]);
 
         // Draw jobs list in the main content area with current column settings
+        // Make sure to still render the jobs list even when log view is visible
+        // so that the jobs list is updated when user navigates with SHIFT+arrow keys
         self.jobs_list
             .render(frame, areas[1], &self.selected_columns, &self.sort_columns);
 
@@ -283,6 +292,11 @@ impl App {
         if self.show_columns_popup {
             let popup_area = centered_popup_area(frame.area(), 80, 80);
             self.columns_popup.render(frame, popup_area);
+        }
+
+        // If log view is visible, draw it and check if we need to refresh its content
+        if self.log_view.visible {
+            self.log_view.render(frame, frame.area());
         }
     }
 
@@ -407,10 +421,15 @@ impl App {
             (_, KeyCode::Char('q'))
             | (_, KeyCode::Esc)
             | (KeyModifiers::CONTROL, KeyCode::Char('c')) => {
-                if self.show_filter_popup || self.show_job_detail || self.show_columns_popup {
+                if self.show_filter_popup
+                    || self.show_job_detail
+                    || self.show_columns_popup
+                    || self.log_view.visible
+                {
                     self.show_filter_popup = false;
                     self.show_job_detail = false;
                     self.show_columns_popup = false;
+                    self.log_view.hide();
                 } else {
                     self.quit();
                 }
@@ -425,12 +444,18 @@ impl App {
 
             // Navigation
             (_, KeyCode::Up)
-                if !self.show_filter_popup && !self.show_job_detail && !self.show_columns_popup =>
+                if !self.show_filter_popup
+                    && !self.show_job_detail
+                    && !self.show_columns_popup
+                    && !self.log_view.visible =>
             {
                 self.jobs_list.previous();
             }
             (_, KeyCode::Down)
-                if !self.show_filter_popup && !self.show_job_detail && !self.show_columns_popup =>
+                if !self.show_filter_popup
+                    && !self.show_job_detail
+                    && !self.show_columns_popup
+                    && !self.log_view.visible =>
             {
                 self.jobs_list.next();
             }
@@ -487,7 +512,10 @@ impl App {
 
             // Job detail view
             (_, KeyCode::Enter)
-                if !self.show_filter_popup && !self.show_job_detail && !self.show_columns_popup =>
+                if !self.show_filter_popup
+                    && !self.show_job_detail
+                    && !self.show_columns_popup
+                    && !self.log_view.visible =>
             {
                 if self.jobs_list.selected_job().is_some() {
                     self.show_job_detail = true;
@@ -497,6 +525,63 @@ impl App {
             // Close job detail view
             (_, KeyCode::Enter | KeyCode::Esc) if self.show_job_detail => {
                 self.show_job_detail = false;
+            }
+
+            // Show log view
+            (_, KeyCode::Char('v'))
+                if !self.show_filter_popup
+                    && !self.show_job_detail
+                    && !self.show_columns_popup
+                    && !self.log_view.visible =>
+            {
+                if let Some(job) = self.jobs_list.selected_job() {
+                    self.log_view.show(job.id.clone());
+                }
+            }
+
+            // Handle log view key events
+            (_, KeyCode::Char('o')) if self.log_view.visible => {
+                self.log_view.toggle_tab();
+            }
+
+            (_, KeyCode::Up) if self.log_view.visible => {
+                // If Shift is pressed, switch to previous job and show its logs
+                if key.modifiers.contains(KeyModifiers::SHIFT) {
+                    if self.jobs_list.previous() {
+                        if let Some(job) = self.jobs_list.selected_job() {
+                            self.log_view.change_job(job.id.clone());
+                        }
+                    }
+                } else {
+                    // Normal scrolling behavior
+                    self.log_view.scroll_up();
+                }
+            }
+
+            (_, KeyCode::Down) if self.log_view.visible => {
+                // If Shift is pressed, switch to next job and show its logs
+                if key.modifiers.contains(KeyModifiers::SHIFT) {
+                    if self.jobs_list.next() {
+                        if let Some(job) = self.jobs_list.selected_job() {
+                            self.log_view.change_job(job.id.clone());
+                        }
+                    }
+                } else {
+                    // Normal scrolling behavior
+                    self.log_view.scroll_down();
+                }
+            }
+
+            (KeyModifiers::CONTROL, KeyCode::Char('u')) if self.log_view.visible => {
+                self.log_view.page_up();
+            }
+
+            (KeyModifiers::CONTROL, KeyCode::Char('d')) if self.log_view.visible => {
+                self.log_view.page_down();
+            }
+
+            (_, KeyCode::Char('a')) if self.log_view.visible => {
+                self.log_view.toggle_auto_scroll();
             }
 
             // Handle columns popup key events
@@ -565,6 +650,11 @@ impl App {
             if let Err(e) = self.refresh_jobs() {
                 self.set_status_message(format!("Auto-refresh failed: {}", e), 3);
             }
+        }
+
+        // Check for log view updates and refresh content
+        if self.log_view.visible {
+            self.log_view.check_refresh();
         }
     }
 
