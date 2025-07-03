@@ -612,7 +612,6 @@ impl FilterPopup {
                         // If already at the top, move to the last focusable element
                         self.focus = FilterFocus::NodeFilter;
                     }
-                    _ => {}
                 }
                 FilterAction::None
             }

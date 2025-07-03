@@ -3,8 +3,7 @@ use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    text::Line,
-    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs},
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
 };
 
 /// Available columns for display in job list
@@ -635,6 +634,10 @@ impl ColumnsPopup {
             KeyCode::Up => {
                 if let Some(selected) = self.sort_columns_state.selected() {
                     if selected > 0 {
+                        if key.modifiers.contains(KeyModifiers::SHIFT) {
+                            // Move column up
+                            self.sort_columns.swap(selected, selected - 1);
+                        }
                         self.sort_columns_state.select(Some(selected - 1));
                     }
                 }
@@ -643,6 +646,10 @@ impl ColumnsPopup {
             KeyCode::Down => {
                 if let Some(selected) = self.sort_columns_state.selected() {
                     if selected < self.sort_columns.len().saturating_sub(1) {
+                        if key.modifiers.contains(KeyModifiers::SHIFT) {
+                            // Move column down
+                            self.sort_columns.swap(selected, selected + 1);
+                        }
                         self.sort_columns_state.select(Some(selected + 1));
                     }
                 }
@@ -671,25 +678,6 @@ impl ColumnsPopup {
                             self.sort_columns_state
                                 .select(Some(self.sort_columns.len() - 1));
                         }
-                    }
-                }
-                ColumnsAction::None
-            }
-            // Move sort column up/down with Ctrl+Up/Down
-            KeyCode::Up if key.modifiers.contains(KeyModifiers::ALT) => {
-                if let Some(selected) = self.sort_columns_state.selected() {
-                    if selected > 0 {
-                        self.sort_columns.swap(selected, selected - 1);
-                        self.sort_columns_state.select(Some(selected - 1));
-                    }
-                }
-                ColumnsAction::None
-            }
-            KeyCode::Down if key.modifiers.contains(KeyModifiers::ALT) => {
-                if let Some(selected) = self.sort_columns_state.selected() {
-                    if selected < self.sort_columns.len().saturating_sub(1) {
-                        self.sort_columns.swap(selected, selected + 1);
-                        self.sort_columns_state.select(Some(selected + 1));
                     }
                 }
                 ColumnsAction::None
