@@ -30,7 +30,7 @@ use crate::{
     },
     utils::{
         event::{Event as AppEvent, EventConfig, EventHandler},
-        file_watcher::{FileContent, FileWatcherError, FileWatcherHandle},
+        file_watcher::{FileWatcherError, FileWatcherHandle},
         get_username,
     },
 };
