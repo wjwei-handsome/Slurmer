@@ -296,7 +296,8 @@ impl App {
 
         // If log view is visible, draw it and check if we need to refresh its content
         if self.log_view.visible {
-            self.log_view.render(frame, frame.area());
+            let popup_area = centered_popup_area(frame.area(), 80, 80);
+            self.log_view.render(frame, popup_area);
         }
     }
 

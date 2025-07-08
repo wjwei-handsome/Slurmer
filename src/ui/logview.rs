@@ -4,11 +4,12 @@ use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    text::{Line, Span, Text},
+    widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
 use std::{
     collections::HashMap,
+    iter::once,
     path::{Path, PathBuf},
     process::Command,
     time::{Duration, Instant},
@@ -212,9 +213,8 @@ impl LogView {
             return;
         }
 
-        // Create a centered popup area for the log view
-        let log_area = self.create_popup_area(area);
-
+        let log_area = area;
+        frame.render_widget(Clear, log_area);
         let title = match (&self.job_id, self.current_tab) {
             (Some(id), LogTab::StdOut) => format!("Job {} - stdout", id),
             (Some(id), LogTab::StdErr) => format!("Job {} - stderr", id),
@@ -238,7 +238,15 @@ impl LogView {
             self.content.clone()
         };
 
-        let log_paragraph = Paragraph::new(log_text)
+        let fit_text = Self::fit_text(
+            &log_text,
+            log_area.height as usize,
+            log_area.width as usize,
+            self.scroll_position,
+            true,
+        );
+
+        let log_paragraph = Paragraph::new(fit_text)
             .style(Style::default().fg(Color::White))
             .block(
                 Block::default()
@@ -252,35 +260,49 @@ impl LogView {
         frame.render_widget(log_paragraph, log_area);
     }
 
-    // Create a popup area for the log view
-    fn create_popup_area(&self, area: Rect) -> Rect {
-        // Use 80% of the screen width and height
-        let width_percentage = 80;
-        let height_percentage = 80;
+    fn fit_text(s: &str, lines: usize, cols: usize, offset: usize, wrap: bool) -> Text {
+        let s = s.rsplit_once(&['\r', '\n']).map_or(s, |(p, _)| p); // skip everything after last line delimiter
+        let l = s.lines().flat_map(|l| l.split('\r')); // bandaid for term escape codes
 
-        let popup_layout = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints(
-                [
-                    Constraint::Percentage((100 - height_percentage) / 2),
-                    Constraint::Percentage(height_percentage),
-                    Constraint::Percentage((100 - height_percentage) / 2),
-                ]
-                .as_ref(),
-            )
-            .split(area);
+        let iter = l
+            .skip(offset)
+            .flat_map(|l| {
+                let chunks = Self::chunked_string(l, cols, cols.saturating_sub(2));
+                chunks.into_iter().enumerate().map(|(i, chunk)| {
+                    if i == 0 {
+                        Line::raw(chunk)
+                    } else {
+                        Line::default().spans(vec![
+                            Span::styled("↪ ", Style::default().add_modifier(Modifier::DIM)),
+                            Span::raw(chunk),
+                        ])
+                    }
+                })
+            })
+            .take(lines);
 
-        Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints(
-                [
-                    Constraint::Percentage((100 - width_percentage) / 2),
-                    Constraint::Percentage(width_percentage),
-                    Constraint::Percentage((100 - width_percentage) / 2),
-                ]
-                .as_ref(),
-            )
-            .split(popup_layout[1])[1]
+        Text::from(iter.collect::<Vec<_>>())
+    }
+
+    fn chunked_string(s: &str, first_chunk_size: usize, chunk_size: usize) -> Vec<&str> {
+        let stepped_indices = s
+            .char_indices()
+            .map(|(i, _)| i)
+            .enumerate()
+            .filter(|&(i, _)| {
+                if i > (first_chunk_size) {
+                    chunk_size > 0 && (i - first_chunk_size) % chunk_size == 0
+                } else {
+                    i == 0 || i == first_chunk_size
+                }
+            })
+            .map(|(_, e)| e)
+            .collect::<Vec<_>>();
+        let windows = stepped_indices.windows(2).collect::<Vec<_>>();
+
+        let iter = windows.iter().map(|w| &s[w[0]..w[1]]);
+        let last_index = *stepped_indices.last().unwrap_or(&0);
+        iter.chain(once(&s[last_index..])).collect()
     }
 
     /// Fetch the stdout and stderr paths for the current job
