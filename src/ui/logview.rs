@@ -27,7 +27,6 @@ pub struct LogView {
     pub lines_to_show: usize,
     pub auto_scroll: bool,
     pub page_size: usize,
-    pub live_mode: bool,
     pub file_watcher: Option<FileWatcherHandle>,
     pub file_watcher_rx: Option<Receiver<Result<FileContent, FileWatcherError>>>,
     pub file_changed_notification: Option<String>,
@@ -45,8 +44,8 @@ impl LogView {
         // Create channels for communication with the file watcher
         let (sender, receiver) = unbounded();
 
-        // Create the file watcher
-        let file_watcher = FileWatcherHandle::new(sender, Duration::from_millis(500));
+        // Create the file watcher with a shorter refresh interval
+        let file_watcher = FileWatcherHandle::new(sender, Duration::from_millis(200));
 
         Self {
             visible: false,
@@ -61,7 +60,6 @@ impl LogView {
             lines_to_show: 20,
             auto_scroll: true,
             page_size: 10,
-            live_mode: true,
             file_watcher: Some(file_watcher),
             file_watcher_rx: Some(receiver),
             file_changed_notification: None,
@@ -81,8 +79,12 @@ impl LogView {
         self.scroll_position = 0;
         self.log_content.clear();
         self.current_tab = LogTab::StdOut;
-        self.auto_scroll = true;
         self.file_changed_notification = None;
+        self.truncated = false;
+
+        // Add clear information about what we're doing
+        self.log_content
+            .push(format!("Loading information for job {}...", job_id));
 
         // Get stdout and stderr paths from scontrol
         self.fetch_log_paths();
@@ -100,6 +102,9 @@ impl LogView {
     }
 
     pub fn toggle_tab(&mut self) {
+        // Get the previous tab for logging
+        let previous_tab = self.current_tab;
+
         self.current_tab = match self.current_tab {
             LogTab::StdOut => LogTab::StdErr,
             LogTab::StdErr => LogTab::StdOut,
@@ -107,6 +112,19 @@ impl LogView {
         self.scroll_position = 0;
         self.log_content.clear();
         self.file_changed_notification = None;
+
+        // Log what we're doing
+        self.log_content.push(format!(
+            "Switched from {} to {}",
+            match previous_tab {
+                LogTab::StdOut => "Standard Output",
+                LogTab::StdErr => "Standard Error",
+            },
+            match self.current_tab {
+                LogTab::StdOut => "Standard Output",
+                LogTab::StdErr => "Standard Error",
+            }
+        ));
 
         // Start watching the new log file based on the current tab
         self.watch_current_path();
@@ -152,21 +170,13 @@ impl LogView {
             self.scroll_position = self.log_content.len().saturating_sub(1);
         }
     }
-    pub fn toggle_live_mode(&mut self) {
-        self.live_mode = !self.live_mode;
-        self.file_changed_notification = None;
-
-        // Refresh the log content immediately after changing mode
-        if !self.live_mode {
-            self.refresh_log_content();
-        }
-    }
 
     pub fn check_refresh(&mut self) {
         if self.visible {
             // Check for new content from the file watcher
             if let Some(rx) = &self.file_watcher_rx {
                 // Try to receive all pending messages without blocking
+                let mut content_updated = false;
                 while let Ok(result) = rx.try_recv() {
                     match result {
                         Ok(file_content) => {
@@ -183,6 +193,9 @@ impl LogView {
                                 for line in file_content.content.lines() {
                                     self.log_content.push(line.to_string());
                                 }
+
+                                // Mark that we received content
+                                content_updated = true;
 
                                 // Limit the number of lines to keep memory usage reasonable
                                 let max_lines = 1000; // Reasonable buffer size
@@ -208,10 +221,10 @@ impl LogView {
             }
 
             // For static mode or backup polling, also refresh periodically
-            if !self.live_mode && self.last_refresh.elapsed() >= self.refresh_interval {
-                self.refresh_log_content();
-                self.last_refresh = Instant::now();
-            }
+            // if !self.live_mode && self.last_refresh.elapsed() >= self.refresh_interval {
+            //     self.refresh_log_content();
+            //     self.last_refresh = Instant::now();
+            // }
         }
     }
 
@@ -239,52 +252,134 @@ impl LogView {
             LogTab::StdErr => self.stderr_path.clone(),
         };
 
+        // Log the path we're trying to watch
+        if let Some(path_str) = &path {
+            self.log_content
+                .push(format!("Watching file: {}", path_str));
+            eprintln!("LogView attempting to watch: {}", path_str);
+        } else {
+            self.log_content
+                .push("No log file path available".to_string());
+
+            // If we have a job ID but no path, explain why
+            if self.job_id.is_some() {
+                self.log_content.push("This could mean:".to_string());
+                self.log_content
+                    .push("1. The job hasn't created output files yet".to_string());
+                self.log_content
+                    .push("2. The job is in queue or pending state".to_string());
+                self.log_content
+                    .push("3. There was an error getting job information".to_string());
+            }
+        }
+
         if let Some(watcher) = &mut self.file_watcher {
             if let Some(path_str) = path {
-                // Convert string path to PathBuf and send to watcher
-                let path_buf = PathBuf::from(path_str);
-                watcher.set_file_path(Some(path_buf));
+                // Check if file exists first
+                let path_buf = PathBuf::from(&path_str);
+                if !path_buf.exists() {
+                    self.log_content
+                        .push(format!("Warning: File not found - {}", path_str));
+                    self.log_content
+                        .push("The file might be created when the job starts running.".to_string());
+                    self.log_content
+                        .push("Will start watching once the file is created.".to_string());
+                } else {
+                    self.log_content
+                        .push("File exists. Starting to monitor content...".to_string());
+                }
+
+                // Send the path to the watcher regardless, to start watching for file creation
+                watcher.set_file_path(Some(path_buf.clone()));
+                eprintln!("Setting watcher path to: {:?}", path_buf);
             } else {
                 // No path available, stop watching
                 watcher.set_file_path(None);
+                eprintln!("No path available, stopping file watcher");
             }
+        } else {
+            self.log_content
+                .push("Warning: File watcher is not initialized".to_string());
         }
 
-        // Also do an initial content fetch for immediate display
-        self.refresh_log_content();
+        // Always do an initial content fetch for immediate display
     }
 
-    fn refresh_log_content(&mut self) {
-        // Only used in static mode or for initial content
-        if self.live_mode {
-            return;
-        }
+    // pub fn refresh_log_content(&mut self) {
+    //     // For both static mode initial content and checking if file exists
+    //     let path = match self.current_tab {
+    //         LogTab::StdOut => &self.stdout_path,
+    //         LogTab::StdErr => &self.stderr_path,
+    //     };
 
-        let path = match self.current_tab {
-            LogTab::StdOut => &self.stdout_path,
-            LogTab::StdErr => &self.stderr_path,
-        };
+    //     if let Some(path) = path {
+    //         // First check if the file exists
 
-        if let Some(path) = path {
-            let output = Command::new("tail")
-                .args(["-n", &self.lines_to_show.to_string(), path])
-                .output();
+    //         // File exists, try to read it
+    //         let output = Command::new("tail")
+    //             .args(["-n", &self.lines_to_show.to_string(), path])
+    //             .output();
 
-            if let Ok(output) = output {
-                if output.status.success() {
-                    let content = String::from_utf8_lossy(&output.stdout);
-                    self.log_content = content.lines().map(|line| line.to_string()).collect();
+    //         if let Ok(output) = output {
+    //             if output.status.success() {
+    //                 let content = String::from_utf8_lossy(&output.stdout);
+    //                 let content_lines: Vec<&str> = content.lines().collect();
 
-                    // If auto-scroll is enabled, scroll to the bottom
-                    if self.auto_scroll {
-                        self.scroll_position = self.log_content.len().saturating_sub(1);
-                    }
-                } else {
-                    eprintln!("tail failed , fuck")
-                }
-            }
-        }
-    }
+    //                 // Add the content lines
+    //                 if content_lines.is_empty() {
+    //                     self.log_content
+    //                         .push("(File exists but is empty)".to_string());
+    //                 } else {
+    //                     for line in content_lines {
+    //                         self.log_content.push(line.to_string());
+    //                     }
+    //                 }
+
+    //                 // If auto-scroll is enabled, scroll to the bottom
+    //                 if self.auto_scroll {
+    //                     self.scroll_position = self.log_content.len().saturating_sub(1);
+    //                 }
+
+    //                 // Mark the refresh time
+    //                 self.last_refresh = Instant::now();
+    //             } else {
+    //                 let stderr = String::from_utf8_lossy(&output.stderr);
+    //                 if !self.live_mode {
+    //                     self.log_content.clear();
+    //                 }
+    //                 self.log_content
+    //                     .push(format!("Failed to read log file: {}", stderr));
+    //             }
+    //         }
+    //     } else {
+    //         // No path available
+    //         if !self.live_mode {
+    //             self.log_content.clear();
+    //             self.log_content
+    //                 .push("No log file path available".to_string());
+
+    //             // If we have a job ID, give more helpful information
+    //             if let Some(job_id) = &self.job_id {
+    //                 self.log_content.push(format!("Job ID: {}", job_id));
+    //                 self.log_content
+    //                     .push("Trying to fetch job information...".to_string());
+
+    //                 // Try to fetch log paths again in case they're now available
+    //                 self.fetch_log_paths();
+
+    //                 if self.stdout_path.is_none() && self.stderr_path.is_none() {
+    //                     self.log_content
+    //                         .push("Could not find output paths for this job.".to_string());
+    //                 } else {
+    //                     // We found paths, update the view
+    //                     self.log_content
+    //                         .push("Found output paths. Refreshing...".to_string());
+    //                     self.watch_current_path();
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
 
     pub fn render(&self, f: &mut Frame, area: Rect) {
         if !self.visible {
@@ -298,7 +393,7 @@ impl LogView {
 
         // Create the popup block
         let job_id = self.job_id.clone().unwrap_or_default();
-        let mode_indicator = if self.live_mode { "[LIVE]" } else { "[STATIC]" };
+        let mode_indicator = "[LIVE]";
         let title = match self.current_tab {
             LogTab::StdOut => format!("Job {} - Standard Output {}", job_id, mode_indicator),
             LogTab::StdErr => format!("Job {} - Standard Error {}", job_id, mode_indicator),
@@ -392,6 +487,8 @@ impl LogView {
             Span::raw("Toggle auto-scroll | "),
             Span::styled("[l] ", Style::default().add_modifier(Modifier::BOLD)),
             Span::raw("Toggle live mode | "),
+            Span::styled("[r] ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw("Refresh | "),
             Span::styled("[Esc/q] ", Style::default().add_modifier(Modifier::BOLD)),
             Span::raw("Close"),
         ];

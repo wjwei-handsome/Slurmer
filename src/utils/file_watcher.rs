@@ -100,6 +100,7 @@ impl FileWatcher {
     }
 
     fn run(&mut self) -> Result<(), RecvError> {
+        eprintln!("Starting file watcher");
         // Setup the file watcher channel
         let (watch_sender, watch_receiver) = unbounded();
 
@@ -183,6 +184,7 @@ impl FileWatcher {
                                         });
 
                                         // Do an initial read of the file
+                                        eprintln!("Initial read request for path: {:?}", p);
                                         let _ = notify_sender.send(());
                                     },
                                     Err(e) => {
@@ -191,6 +193,7 @@ impl FileWatcher {
                                 };
                             } else {
                                 // No file to watch, send empty content
+                                eprintln!("No file to watch, sending empty content");
                                 let content = FileContent {
                                     content: String::new(),
                                     is_truncated: false,
@@ -214,7 +217,11 @@ impl FileWatcher {
                     if let Ok(content_result) = msg {
                         // Forward the content to the app
                         let result = content_result.map_err(FileWatcherError::File);
-                        let _ = self.content_sender.send(result);
+                        eprintln!("Forwarding content to app: {} bytes",
+                                 result.as_ref().map(|c| c.content.len()).unwrap_or(0));
+                        if let Err(e) = self.content_sender.send(result) {
+                            eprintln!("Failed to send content to app: {}", e);
+                        }
                     }
                 }
             }
@@ -288,8 +295,26 @@ impl FileReader {
             self.pos = f.seek(io::SeekFrom::Start(self.pos))?;
 
             // Read new content
-            let bytes_read = f.read_to_string(&mut self.content)? as u64;
+            let mut raw_content = String::new();
+            let bytes_read = f.read_to_string(&mut raw_content)? as u64;
             self.pos += bytes_read;
+
+            // Process raw content to handle \r
+            let processed_content = raw_content
+                .split('\n')
+                .map(|line| line.replace('\r', ""))
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            self.content = processed_content;
+            // Log when we're reading content
+            if !self.content.is_empty() {
+                eprintln!(
+                    "Read {} bytes of new content from {}",
+                    bytes_read,
+                    self.file_path.display()
+                );
+            }
 
             Ok(FileContent {
                 content: self.content.clone(),

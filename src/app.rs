@@ -580,10 +580,6 @@ impl App {
                 self.log_view.page_down();
             }
 
-            (_, KeyCode::Char('a')) if self.log_view.visible => {
-                self.log_view.toggle_auto_scroll();
-            }
-
             // Handle columns popup key events
             _ if self.show_columns_popup => {
                 let action = self.columns_popup.handle_key(key);
