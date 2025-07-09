@@ -53,6 +53,21 @@ pub struct LogView {
     file_receiver: Option<Receiver<Result<String, FileWatcherError>>>,
     last_refresh: Option<Instant>,
     refresh_interval: Duration,
+    /// Indicates the status of the current log file
+    file_status: LogFileStatus,
+}
+
+/// Status of the log file being watched
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LogFileStatus {
+    /// No file found or not set
+    NotFound,
+    /// File exists but waiting for content
+    Waiting,
+    /// File content has been loaded
+    Loaded,
+    /// Error occurred when accessing the file
+    Error,
 }
 
 impl LogView {
@@ -69,13 +84,14 @@ impl LogView {
             file_receiver: None,
             last_refresh: None,
             refresh_interval: Duration::from_secs(2),
+            file_status: LogFileStatus::NotFound,
         }
     }
 
     /// Show the log view for a specific job
     pub fn show(&mut self, job_id: String) {
-        self.visible = true;
         self.change_job(job_id);
+        self.visible = true;
     }
 
     /// Hide the log view
@@ -94,6 +110,7 @@ impl LogView {
         self.stderr_path = None;
         self.content = String::new();
         self.scroll_position = 0;
+        self.file_status = LogFileStatus::NotFound;
 
         // Fetch the log file paths
         self.fetch_log_paths();
@@ -107,6 +124,7 @@ impl LogView {
 
         // Update the watched file based on current tab
         self.update_watched_file();
+        self.check_refresh();
     }
 
     /// Toggle between stdout and stderr logs
@@ -114,6 +132,7 @@ impl LogView {
         self.current_tab.toggle();
         self.content = String::new();
         self.scroll_position = 0;
+        self.file_status = LogFileStatus::NotFound;
         self.update_watched_file();
     }
 
@@ -127,16 +146,15 @@ impl LogView {
 
             match path {
                 Some(p) if !p.is_empty() => {
+                    // File path exists, set status to waiting for content
                     watcher.set_file_path(Some(PathBuf::from(&p)));
+                    self.file_status = LogFileStatus::Waiting;
                 }
                 _ => {
                     // Either no path or empty path
                     watcher.set_file_path(None);
-                    self.content = format!(
-                        "No {} log file found for job {}",
-                        self.current_tab.as_str(),
-                        self.job_id.as_deref().unwrap_or("unknown")
-                    );
+                    self.file_status = LogFileStatus::NotFound;
+                    self.content = String::new();
                 }
             }
         }
@@ -159,10 +177,15 @@ impl LogView {
                     Ok(content) => {
                         if !content.is_empty() {
                             self.content = content;
+                            self.file_status = LogFileStatus::Loaded;
+                        } else if self.file_status == LogFileStatus::Waiting {
+                            // Got empty content but file exists, keep waiting
+                            self.file_status = LogFileStatus::Waiting;
                         }
                     }
                     Err(e) => {
                         self.content = format!("Error watching file: {}", e);
+                        self.file_status = LogFileStatus::Error;
                     }
                 }
             }
@@ -223,19 +246,24 @@ impl LogView {
 
         let help_text = " [↑/↓] Scroll | [o] Toggle stdout/stderr | [q] Close ";
 
-        let log_text = if self.content.is_empty() {
-            match self.current_tab {
+        let log_text = match (self.file_status, self.content.is_empty()) {
+            (LogFileStatus::NotFound, _) => match self.current_tab {
                 LogTab::StdOut => format!(
-                    "No stdout log available for job {}",
+                    "No stdout log file found for job {}",
                     self.job_id.as_deref().unwrap_or("unknown")
                 ),
                 LogTab::StdErr => format!(
-                    "No stderr log available for job {}",
+                    "No stderr log file found for job {}",
                     self.job_id.as_deref().unwrap_or("unknown")
                 ),
-            }
-        } else {
-            self.content.clone()
+            },
+            (LogFileStatus::Waiting, true) => format!(
+                "Loading {} log content for job {}...",
+                self.current_tab.as_str(),
+                self.job_id.as_deref().unwrap_or("unknown")
+            ),
+            (LogFileStatus::Error, _) => self.content.clone(),
+            _ => self.content.clone(),
         };
 
         let fit_text = Self::fit_text(
@@ -245,6 +273,7 @@ impl LogView {
             self.scroll_position,
             true,
         );
+        eprintln!("fit_text: {}", fit_text);
 
         let log_paragraph = Paragraph::new(fit_text)
             .style(Style::default().fg(Color::White))
@@ -265,23 +294,33 @@ impl LogView {
         let l = s.lines().flat_map(|l| l.split('\r')); // bandaid for term escape codes
 
         let iter = l
+            .rev()
             .skip(offset)
             .flat_map(|l| {
                 let chunks = Self::chunked_string(l, cols, cols.saturating_sub(2));
-                chunks.into_iter().enumerate().map(|(i, chunk)| {
-                    if i == 0 {
-                        Line::raw(chunk)
-                    } else {
-                        Line::default().spans(vec![
-                            Span::styled("↪ ", Style::default().add_modifier(Modifier::DIM)),
-                            Span::raw(chunk),
-                        ])
-                    }
-                })
+                chunks
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, chunk)| {
+                        if i == 0 {
+                            Line::raw(chunk)
+                        } else {
+                            Line::default().spans(vec![
+                                Span::styled("↪ ", Style::default().add_modifier(Modifier::DIM)),
+                                Span::raw(chunk),
+                            ])
+                        }
+                    })
+                    .rev()
             })
             .take(lines);
 
-        Text::from(iter.collect::<Vec<_>>())
+        Text::from(
+            iter.collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect::<Vec<_>>(),
+        )
     }
 
     fn chunked_string(s: &str, first_chunk_size: usize, chunk_size: usize) -> Vec<&str> {
@@ -319,8 +358,32 @@ impl LogView {
 
                     self.stdout_path = key_value_pairs.get("StdOut").map(|s| s.to_string());
                     self.stderr_path = key_value_pairs.get("StdErr").map(|s| s.to_string());
+
+                    // Check if we have valid paths for the current tab
+                    let has_path = match self.current_tab {
+                        LogTab::StdOut => {
+                            self.stdout_path.is_some()
+                                && !self.stdout_path.as_ref().unwrap().is_empty()
+                        }
+                        LogTab::StdErr => {
+                            self.stderr_path.is_some()
+                                && !self.stderr_path.as_ref().unwrap().is_empty()
+                        }
+                    };
+
+                    if has_path {
+                        self.file_status = LogFileStatus::Waiting;
+                    } else {
+                        self.file_status = LogFileStatus::NotFound;
+                    }
+                } else {
+                    self.file_status = LogFileStatus::Error;
                 }
+            } else {
+                self.file_status = LogFileStatus::Error;
             }
+        } else {
+            self.file_status = LogFileStatus::NotFound;
         }
     }
 }
