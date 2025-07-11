@@ -97,23 +97,4 @@ impl EventHandler {
 
         Self { rx, tx, handle }
     }
-
-    /// Checks if the given key event matches the provided code and modifiers
-    pub fn is_key_with_modifiers(key: KeyEvent, code: KeyCode, modifiers: KeyModifiers) -> bool {
-        key.code == code && key.modifiers == modifiers
-    }
-
-    /// Checks if the given key event matches any key with the provided modifiers
-    pub fn is_any_key_with_modifiers(key: KeyEvent, modifiers: KeyModifiers) -> bool {
-        key.modifiers == modifiers
-    }
-
-    /// Close the event handler
-    pub fn close(&self) -> Result<()> {
-        self.tx.send(Event::Key(KeyEvent::new(
-            KeyCode::Char('q'),
-            KeyModifiers::CONTROL,
-        )))?;
-        Ok(())
-    }
 }

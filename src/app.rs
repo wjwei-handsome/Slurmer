@@ -11,7 +11,11 @@ use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;
 
 use crate::{
-    slurm::squeue::{self, SqueueOptions, run_squeue},
+    slurm::{
+        JobState,
+        command::{get_partitions, get_qos},
+        squeue::{SqueueOptions, run_squeue},
+    },
     ui::{
         columns::{ColumnsAction, ColumnsPopup, JobColumn, SortColumn, SortOrder},
         filter::{FilterAction, FilterPopup},
@@ -57,6 +61,8 @@ pub struct App {
     pub available_partitions: Vec<String>,
     /// Available QOS options
     pub available_qos: Vec<String>,
+    /// Available job states
+    pub available_states: Vec<JobState>,
     /// Selected columns for display
     pub selected_columns: Vec<JobColumn>,
     /// Sort columns
@@ -78,9 +84,10 @@ impl App {
             ..Default::default()
         };
 
-        // Get available partitions and QOS (TODO:placeholder values for now)
-        let available_partitions = squeue::available_partitions()?;
-        let available_qos = squeue::available_qos()?;
+        // Get available partitions and QOS
+        let available_partitions = runtime.block_on(async { get_partitions().await })?;
+        let available_qos = runtime.block_on(async { get_qos().await })?;
+        let available_states = JobState::get_available_states();
 
         // Default columns and sort options
         let selected_columns = JobColumn::defaults();
@@ -105,6 +112,7 @@ impl App {
             job_refresh_interval: 10, // Default to 10 seconds refresh
             available_partitions,
             available_qos,
+            available_states,
             selected_columns,
             sort_columns,
         })
@@ -137,7 +145,7 @@ impl App {
     }
 
     /// Refresh the jobs list from Slurm
-    pub fn refresh_jobs(&mut self) -> Result<()> {
+    fn refresh_jobs(&mut self) -> Result<()> {
         // Update squeue format and sort options
         self.update_squeue_format();
 
@@ -302,25 +310,11 @@ impl App {
 
     /// Render the filter popup
     fn render_filter_popup(&mut self, frame: &mut Frame, area: Rect) {
-        // All possible job states for the filter
-        // TODO: replace it
-        let all_states = [
-            crate::slurm::JobState::Pending,
-            crate::slurm::JobState::Running,
-            crate::slurm::JobState::Completed,
-            crate::slurm::JobState::Failed,
-            crate::slurm::JobState::Cancelled,
-            crate::slurm::JobState::Timeout,
-            crate::slurm::JobState::NodeFail,
-            crate::slurm::JobState::Preempted,
-            crate::slurm::JobState::Boot,
-        ];
-
         self.filter_popup.render(
             frame,
             area,
             &self.squeue_options,
-            &all_states,
+            &self.available_states,
             &self.available_partitions,
             &self.available_qos,
         );
@@ -362,26 +356,28 @@ impl App {
     /// Render the header with status information
     fn render_header(&self, frame: &mut Frame, area: Rect) {
         // Prepare the status text
-        let mut status_text = String::new();
-
-        // Add current status message if exists and hasn't timed out
-        let show_status = if let Some(timeout) = self.status_timeout {
-            Instant::now() < timeout
+        let status_text = if let Some(timeout) = self.status_timeout {
+            if Instant::now() < timeout {
+                // Use current status message if it exists and hasn't timed out
+                self.status_message.clone()
+            } else {
+                // Show filter information
+                let filter_desc = self.get_filter_description();
+                if !filter_desc.is_empty() {
+                    format!("Filters: {}", filter_desc)
+                } else {
+                    "No filters applied".to_string()
+                }
+            }
         } else {
-            false
-        };
-
-        if show_status {
-            status_text = self.status_message.clone();
-        } else {
-            // Show filter information
+            // Show filter information if there's no status message
             let filter_desc = self.get_filter_description();
             if !filter_desc.is_empty() {
-                status_text = format!("Filters: {}", filter_desc);
+                format!("Filters: {}", filter_desc)
             } else {
-                status_text = "No filters applied".to_string();
+                "No filters applied".to_string()
             }
-        }
+        };
 
         // Draw the header with status information
         draw_header(
@@ -394,7 +390,7 @@ impl App {
     }
 
     /// Handle application events
-    pub fn handle_events(&mut self) -> Result<()> {
+    fn handle_events(&mut self) -> Result<()> {
         match self.event_handler.rx.recv()? {
             AppEvent::Key(key) if key.kind == KeyEventKind::Press => self.handle_key_event(key),
             AppEvent::Mouse(mouse) => self.handle_mouse_event(mouse),
@@ -477,17 +473,7 @@ impl App {
                 let action = self.filter_popup.handle_key(
                     key,
                     &mut self.squeue_options,
-                    &[
-                        crate::slurm::JobState::Pending,
-                        crate::slurm::JobState::Running,
-                        crate::slurm::JobState::Completed,
-                        crate::slurm::JobState::Failed,
-                        crate::slurm::JobState::Cancelled,
-                        crate::slurm::JobState::Timeout,
-                        crate::slurm::JobState::NodeFail,
-                        crate::slurm::JobState::Preempted,
-                        crate::slurm::JobState::Boot,
-                    ],
+                    &self.available_states,
                     &self.available_partitions,
                     &self.available_qos,
                 );
@@ -612,7 +598,7 @@ impl App {
     }
 
     /// Handle mouse events
-    fn handle_mouse_event(&mut self, mouse: MouseEvent) {
+    fn handle_mouse_event(&mut self, _mouse: MouseEvent) {
         // TODO: Implement mouse event handling for TUI interactions
     }
 
@@ -636,20 +622,20 @@ impl App {
     }
 
     /// Set a temporary status message
-    pub fn set_status_message(&mut self, message: String, duration_secs: u64) {
+    fn set_status_message(&mut self, message: String, duration_secs: u64) {
         self.status_message = message;
         self.status_timeout = Some(Instant::now() + Duration::from_secs(duration_secs));
     }
 
     /// Set the auto-refresh interval in seconds
     /// TODO: maybe used it in the future
-    pub fn set_refresh_interval(&mut self, seconds: u64) {
+    fn _set_refresh_interval(&mut self, seconds: u64) {
         self.job_refresh_interval = seconds;
         self.set_status_message(format!("Auto-refresh interval set to {}s", seconds), 3);
     }
 
     /// Apply all filter changes and refresh jobs
-    pub fn apply_filters(&mut self) -> Result<()> {
+    fn apply_filters(&mut self) -> Result<()> {
         self.filter_popup.visible = false;
         self.set_status_message("Applying filters...".to_string(), 3);
 
@@ -727,7 +713,7 @@ impl App {
     }
 
     /// Set running to false to quit the application
-    pub fn quit(&mut self) {
+    fn quit(&mut self) {
         self.running = false;
     }
 

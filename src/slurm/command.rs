@@ -1,6 +1,5 @@
 use async_process::{Command, Output, Stdio};
 use color_eyre::Result;
-use futures::AsyncWriteExt;
 use std::collections::HashMap;
 
 /// Execute a Slurm command asynchronously and return the output
@@ -111,10 +110,6 @@ pub async fn get_partitions() -> Result<Vec<String>> {
 
 /// Get available QOS options
 pub async fn get_qos() -> Result<Vec<String>> {
-    // This is a placeholder - there's no direct Slurm command to list QOS
-    // In a real implementation, you might need to parse sacctmgr show qos
-    // or use a configuration file
-
     let output = execute_command(
         "sacctmgr",
         vec![
@@ -136,7 +131,7 @@ pub async fn get_qos() -> Result<Vec<String>> {
 
     if qos_list.is_empty() {
         // Fallback to some common values if the command fails
-        Ok(vec!["normal".to_string(), "high".to_string()])
+        Ok(vec!["normal".to_string(), "huge".to_string()])
     } else {
         Ok(qos_list)
     }

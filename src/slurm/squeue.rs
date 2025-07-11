@@ -256,23 +256,3 @@ fn parse_squeue_output(output: &Output, format: &str) -> Result<Vec<Job>> {
 
     Ok(jobs)
 }
-
-pub fn available_partitions() -> Result<Vec<String>> {
-    // In a real implementation, this would query Slurm for available partitions
-    // For now, we'll return a placeholder
-    Ok(vec![
-        "compute".to_string(),
-        "gpu".to_string(),
-        "debug".to_string(),
-    ])
-}
-
-pub fn available_qos() -> Result<Vec<String>> {
-    // In a real implementation, this would query Slurm for available QOS options
-    // For now, we'll return a placeholder
-    Ok(vec![
-        "normal".to_string(),
-        "high".to_string(),
-        "urgent".to_string(),
-    ])
-}

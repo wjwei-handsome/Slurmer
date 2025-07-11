@@ -1,5 +1,4 @@
-pub mod scancel;
-pub mod scontrol;
+pub mod command;
 pub mod squeue;
 
 use std::fmt;
@@ -17,6 +16,22 @@ pub enum JobState {
     Preempted,
     Boot,
     Other,
+}
+
+impl JobState {
+    pub fn get_available_states() -> Vec<JobState> {
+        vec![
+            JobState::Pending,
+            JobState::Running,
+            JobState::Completed,
+            JobState::Failed,
+            JobState::Cancelled,
+            JobState::Timeout,
+            JobState::NodeFail,
+            JobState::Preempted,
+            JobState::Boot,
+        ]
+    }
 }
 
 impl fmt::Display for JobState {
