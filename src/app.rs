@@ -13,12 +13,13 @@ use tokio::runtime::Runtime;
 use crate::{
     slurm::{
         JobState,
-        command::{get_partitions, get_qos},
+        command::{execute_scancel, get_partitions, get_qos},
         squeue::{SqueueOptions, run_squeue},
     },
     ui::{
         columns::{ColumnsAction, ColumnsPopup, JobColumn, SortColumn, SortOrder},
         filter::{FilterAction, FilterPopup},
+        jobscript::JobScript,
         jobslist::JobsList,
         layout::{centered_popup_area, draw_footer, draw_header, draw_main_layout},
         logview::LogView,
@@ -46,11 +47,12 @@ pub struct App {
     /// Filter popup state
     pub filter_popup: FilterPopup,
     /// Is the job detail popup visible?
-    pub show_job_detail: bool,
     /// Columns popup state
     pub columns_popup: ColumnsPopup,
     /// Log view state
     pub log_view: LogView,
+    /// Script View state
+    pub script_view: JobScript,
     /// Status message to display in the status bar
     pub status_message: String,
     /// Status message display timeout
@@ -67,6 +69,8 @@ pub struct App {
     pub selected_columns: Vec<JobColumn>,
     /// Sort columns
     pub sort_columns: Vec<SortColumn>,
+    /// Confirm cancel popup state
+    cancel_confirm: bool,
 }
 
 impl App {
@@ -104,9 +108,9 @@ impl App {
             runtime,
             last_refresh: Instant::now(),
             filter_popup: FilterPopup::new(),
-            show_job_detail: false,
             columns_popup: ColumnsPopup::new(selected_columns.clone(), sort_columns.clone()),
             log_view: LogView::new(),
+            script_view: JobScript::new(),
             status_message: String::new(),
             status_timeout: None,
             job_refresh_interval: 10, // Default to 10 seconds refresh
@@ -115,6 +119,7 @@ impl App {
             available_states,
             selected_columns,
             sort_columns,
+            cancel_confirm: false,
         })
     }
 
@@ -271,9 +276,9 @@ impl App {
         }
 
         // If job detail popup is visible, draw it
-        if self.show_job_detail {
+        if self.script_view.visible {
             let popup_area = centered_popup_area(frame.area(), 80, 60);
-            self.render_job_detail(frame, popup_area);
+            self.render_job_script(frame, popup_area);
         }
 
         // If columns popup is visible, draw it
@@ -286,6 +291,12 @@ impl App {
         if self.log_view.visible {
             let popup_area = centered_popup_area(frame.area(), 80, 80);
             self.render_log_view(frame, popup_area);
+        }
+
+        // If cancel confirm popup is visible, draw it
+        if self.cancel_confirm {
+            let popup_area = centered_popup_area(frame.area(), 80, 60);
+            self.render_cancel_confirm(frame, popup_area);
         }
     }
 
@@ -321,27 +332,8 @@ impl App {
     }
 
     /// Render job detail popup
-    fn render_job_detail(&self, frame: &mut Frame, area: Rect) {
-        frame.render_widget(Clear, area);
-        if let Some(job) = self.jobs_list.selected_job() {
-            let detail_text = "abc\nabc";
-
-            let job_detail = Paragraph::new(detail_text)
-                .block(
-                    Block::default()
-                        .title(format!("Job Details: {}", job.id))
-                        .borders(Borders::ALL),
-                )
-                .style(Style::default());
-
-            frame.render_widget(job_detail, area);
-        } else {
-            let job_detail = Paragraph::new("No job selected")
-                .block(Block::default().title("Job Details").borders(Borders::ALL))
-                .style(Style::default());
-
-            frame.render_widget(job_detail, area);
-        }
+    fn render_job_script(&self, frame: &mut Frame, area: Rect) {
+        self.script_view.render(frame, area);
     }
 
     /// Render the footer with XXX TODO:replace it
@@ -389,6 +381,29 @@ impl App {
         );
     }
 
+    fn render_cancel_confirm(&self, frame: &mut Frame, area: Rect) {
+        frame.render_widget(Clear, area);
+        // Render the cancel confirm popup
+        let selected_count = self.jobs_list.get_selected_jobs().len();
+        let cancel_text = if selected_count == 0 {
+            "No jobs selected for cancellation.".to_string()
+        } else {
+            format!(
+                "Are you sure you want to cancel {} selected job(s)? (y/n)",
+                selected_count
+            )
+        };
+        let cancel_popup = Paragraph::new(cancel_text)
+            .block(
+                Block::default()
+                    .title("Confirm Cancel")
+                    .borders(Borders::ALL),
+            )
+            .style(Style::default());
+
+        frame.render_widget(cancel_popup, area);
+    }
+
     /// Handle application events
     fn handle_events(&mut self) -> Result<()> {
         match self.event_handler.rx.recv()? {
@@ -410,21 +425,23 @@ impl App {
             | (_, KeyCode::Esc)
             | (KeyModifiers::CONTROL, KeyCode::Char('c')) => {
                 if self.filter_popup.visible
-                    || self.show_job_detail
+                    || self.script_view.visible
                     || self.columns_popup.visible
                     || self.log_view.visible
+                    || self.cancel_confirm
                 {
                     self.filter_popup.visible = false;
-                    self.show_job_detail = false;
+                    self.script_view.visible = false;
                     self.columns_popup.visible = false;
                     self.log_view.hide();
+                    self.cancel_confirm = false;
                 } else {
                     self.quit();
                 }
             }
 
             // Filter toggle
-            (_, KeyCode::Char('f')) if !self.show_job_detail && !self.filter_popup.visible => {
+            (_, KeyCode::Char('f')) if !self.script_view.visible && !self.filter_popup.visible => {
                 self.filter_popup.visible = true;
                 // Initialize filter popup with current options
                 self.filter_popup.initialize(&self.squeue_options);
@@ -433,7 +450,7 @@ impl App {
             // Navigation
             (_, KeyCode::Up)
                 if !self.filter_popup.visible
-                    && !self.show_job_detail
+                    && !self.script_view.visible
                     && !self.columns_popup.visible
                     && !self.log_view.visible =>
             {
@@ -441,7 +458,7 @@ impl App {
             }
             (_, KeyCode::Down)
                 if !self.filter_popup.visible
-                    && !self.show_job_detail
+                    && !self.script_view.visible
                     && !self.columns_popup.visible
                     && !self.log_view.visible =>
             {
@@ -451,16 +468,56 @@ impl App {
             // Selection
             (_, KeyCode::Char(' '))
                 if !self.filter_popup.visible
-                    && !self.show_job_detail
+                    && !self.script_view.visible
                     && !self.columns_popup.visible =>
             {
                 self.jobs_list.toggle_select();
+            }
+            (_, KeyCode::Char('a'))
+                if !self.filter_popup.visible
+                    && !self.script_view.visible
+                    && !self.columns_popup.visible =>
+            {
+                // if all jobs are selected, deselect all
+                if self.jobs_list.all_selected() {
+                    self.jobs_list.clear_selection();
+                } else {
+                    // Otherwise, select all jobs
+                    self.jobs_list.select_all();
+                }
+            }
+            (_, KeyCode::Char('x'))
+                if !self.filter_popup.visible
+                    && !self.script_view.visible
+                    && !self.columns_popup.visible =>
+            {
+                // scancel the selected jobs and remove them
+                self.cancel_confirm = true;
+            }
+            (_, KeyCode::Char('y'))
+                if self.cancel_confirm
+                    && !self.filter_popup.visible
+                    && !self.script_view.visible
+                    && !self.columns_popup.visible =>
+            {
+                // Confirm cancel selected jobs
+                self.cancel_selected_jobs();
+                self.cancel_confirm = false;
+            }
+            (_, KeyCode::Char('n'))
+                if self.cancel_confirm
+                    && !self.filter_popup.visible
+                    && !self.script_view.visible
+                    && !self.columns_popup.visible =>
+            {
+                // Cancel the cancel confirmation
+                self.cancel_confirm = false;
             }
 
             // Column management popup
             (_, KeyCode::Char('c'))
                 if !self.filter_popup.visible
-                    && !self.show_job_detail
+                    && !self.script_view.visible
                     && !self.columns_popup.visible =>
             {
                 self.columns_popup.visible = true;
@@ -495,24 +552,30 @@ impl App {
             // Job detail view
             (_, KeyCode::Enter)
                 if !self.filter_popup.visible
-                    && !self.show_job_detail
+                    && !self.script_view.visible
                     && !self.columns_popup.visible
                     && !self.log_view.visible =>
             {
-                if self.jobs_list.selected_job().is_some() {
-                    self.show_job_detail = true;
+                if let Some(job) = self.jobs_list.selected_job() {
+                    // Show job script in detail view
+                    self.script_view.show(job.id.clone());
                 }
             }
 
+            _ if self.script_view.visible => {
+                // If script view is visible, handle script view specific keys
+                self.script_view.handle_key(key);
+            }
+
             // Close job detail view
-            (_, KeyCode::Enter) if self.show_job_detail => {
-                self.show_job_detail = false;
+            (_, KeyCode::Enter) if self.script_view.visible => {
+                self.script_view.visible = false;
             }
 
             // Show log view
             (_, KeyCode::Char('v'))
                 if !self.filter_popup.visible
-                    && !self.show_job_detail
+                    && !self.script_view.visible
                     && !self.columns_popup.visible
                     && !self.log_view.visible =>
             {
@@ -585,7 +648,7 @@ impl App {
             // Refresh jobs
             (_, KeyCode::Char('r'))
                 if !self.filter_popup.visible
-                    && !self.show_job_detail
+                    && !self.script_view.visible
                     && !self.columns_popup.visible =>
             {
                 if let Err(e) = self.refresh_jobs() {
@@ -606,7 +669,7 @@ impl App {
     fn handle_tick(&mut self) {
         // Check if it's time to auto-refresh
         if !self.filter_popup.visible
-            && !self.show_job_detail
+            && !self.script_view.visible
             && !self.columns_popup.visible
             && self.last_refresh.elapsed().as_secs() >= self.job_refresh_interval
         {
@@ -769,6 +832,21 @@ impl App {
             self.squeue_options.sorts.insert("i".to_string(), true);
             self.jobs_list.sort_column = 0;
             self.jobs_list.sort_ascending = true;
+        }
+    }
+
+    fn cancel_selected_jobs(&mut self) {
+        // Get selected job IDs
+        let selected_jobs = self.jobs_list.get_selected_jobs();
+        let selecteed_count = selected_jobs.len();
+        let _ = self
+            .runtime
+            .block_on(async { execute_scancel(selected_jobs).await });
+        // refresh the jobs list after cancellation
+        if let Err(e) = self.refresh_jobs() {
+            self.set_status_message(format!("Failed to refresh after cancel: {}", e), 3);
+        } else {
+            self.set_status_message(format!("Cancelled {} job(s)", selecteed_count), 3);
         }
     }
 }

@@ -56,6 +56,11 @@ impl JobsList {
         }
     }
 
+    /// Judge if all jobs are selected
+    pub fn all_selected(&self) -> bool {
+        self.selected_jobs.len() == self.jobs.len()
+    }
+
     /// Select all jobs
     pub fn select_all(&mut self) {
         self.selected_jobs = (0..self.jobs.len()).collect();
@@ -64,20 +69,6 @@ impl JobsList {
     /// Clear all selections
     pub fn clear_selection(&mut self) {
         self.selected_jobs.clear();
-    }
-
-    /// Change sort column
-    /// This only updates the UI display, actual sorting is done by squeue
-    pub fn sort_by(&mut self, column: usize) {
-        if self.sort_column == column {
-            // Toggle sort direction if already sorting by this column
-            self.sort_ascending = !self.sort_ascending;
-        } else {
-            // Change to new sort column with default ascending order
-            self.sort_column = column;
-            self.sort_ascending = true;
-        }
-        // No need to call sort_jobs() as sorting is handled by squeue
     }
 
     /// Update sort configuration based on SortColumn settings
@@ -315,10 +306,11 @@ impl JobsList {
     }
 
     /// Get all selected jobs
-    pub fn get_selected_jobs(&self) -> Vec<&Job> {
+    pub fn get_selected_jobs(&self) -> Vec<String> {
         self.selected_jobs
             .iter()
             .filter_map(|&i| self.jobs.get(i))
+            .map(|job| job.id.clone())
             .collect()
     }
 }

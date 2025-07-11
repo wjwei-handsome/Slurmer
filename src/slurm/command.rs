@@ -30,7 +30,16 @@ pub async fn execute_scancel(job_ids: Vec<String>) -> Result<()> {
         return Ok(());
     }
 
-    let _ = execute_command("scancel", job_ids).await?;
+    // if jobs >= 200, split into chunks for avoiding command line length issues
+    let chunk_size = 200;
+    let chunks: Vec<Vec<String>> = job_ids
+        .chunks(chunk_size)
+        .map(|chunk| chunk.to_vec())
+        .collect();
+    for chunk in chunks {
+        let _ = execute_command("scancel", chunk).await?;
+    }
+
     Ok(())
 }
 
