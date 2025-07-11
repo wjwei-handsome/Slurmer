@@ -1,5 +1,5 @@
 use color_eyre::Result;
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent};
 use ratatui::{
     Frame,
     layout::Rect,
@@ -8,29 +8,20 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 use regex;
-use std::{
-    error::Error,
-    path::PathBuf,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;
 
 use crate::{
-    slurm::{
-        Job,
-        squeue::{self, SqueueOptions, run_squeue},
-    },
+    slurm::squeue::{self, SqueueOptions, run_squeue},
     ui::{
         columns::{ColumnsAction, ColumnsPopup, JobColumn, SortColumn, SortOrder},
         filter::{FilterAction, FilterPopup},
         jobslist::JobsList,
         layout::{centered_popup_area, draw_main_layout},
-        logview::{LogTab, LogView},
+        logview::LogView,
     },
     utils::{
         event::{Event as AppEvent, EventConfig, EventHandler},
-        file_watcher::{FileWatcherError, FileWatcherHandle},
         get_username,
     },
 };
@@ -67,8 +58,6 @@ pub struct App {
     pub status_timeout: Option<Instant>,
     /// Auto-refresh interval in seconds
     pub refresh_interval: u64,
-    /// Active tab index
-    pub active_tab: usize,
     /// Available partitions
     pub available_partitions: Vec<String>,
     /// Available QOS options
@@ -121,7 +110,6 @@ impl App {
             status_message: String::new(),
             status_timeout: None,
             refresh_interval: 10, // Default to 10 seconds refresh
-            active_tab: 0,
             available_partitions,
             available_qos,
             selected_columns,

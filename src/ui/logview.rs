@@ -1,19 +1,13 @@
 use color_eyre::Result;
-use crossbeam::channel::{Receiver, Sender, unbounded};
+use crossbeam::channel::{Receiver, unbounded};
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
-use std::{
-    collections::HashMap,
-    iter::once,
-    path::{Path, PathBuf},
-    process::Command,
-    time::{Duration, Instant},
-};
+use std::{collections::HashMap, iter::once, path::PathBuf, process::Command, time::Duration};
 
 use crate::utils::file_watcher::{FileWatcherError, FileWatcherHandle};
 
@@ -25,7 +19,7 @@ pub enum LogTab {
 }
 
 impl LogTab {
-    pub fn toggle(&mut self) {
+    fn toggle(&mut self) {
         *self = match self {
             LogTab::StdOut => LogTab::StdErr,
             LogTab::StdErr => LogTab::StdOut,
@@ -51,7 +45,6 @@ pub struct LogView {
     pub stderr_path: Option<String>,
     file_watcher: Option<FileWatcherHandle>,
     file_receiver: Option<Receiver<Result<String, FileWatcherError>>>,
-    // last_refresh: Option<Instant>,
     refresh_interval: Duration,
     /// Indicates the status of the current log file
     file_status: LogFileStatus,
@@ -64,8 +57,6 @@ enum LogFileStatus {
     NotFound,
     /// File exists but waiting for content
     Waiting,
-    /// File content has been loaded
-    Loaded,
     /// Error occurred when accessing the file
     Error,
 }
@@ -82,7 +73,6 @@ impl LogView {
             stderr_path: None,
             file_watcher: None,
             file_receiver: None,
-            // last_refresh: None,
             refresh_interval: Duration::from_secs(2),
             file_status: LogFileStatus::NotFound,
         }
@@ -108,7 +98,7 @@ impl LogView {
         self.job_id = Some(job_id);
         self.stdout_path = None;
         self.stderr_path = None;
-        self.content = String::new();
+        // self.content = String::new();
         self.scroll_position = 0;
         self.file_status = LogFileStatus::NotFound;
 
@@ -244,31 +234,20 @@ impl LogView {
 
         let log_area = area;
         frame.render_widget(Clear, log_area);
-        let title = match (&self.job_id, self.current_tab) {
-            (Some(id), LogTab::StdOut) => format!("Job {} - stdout", id),
-            (Some(id), LogTab::StdErr) => format!("Job {} - stderr", id),
-            (None, _) => "Log View".to_string(),
+
+        let title = match &self.job_id {
+            Some(id) => format!("Job {} - {}", id, self.current_tab.as_str()),
+            None => format!("Log View - {}", self.current_tab.as_str()),
         };
 
         let help_text = " [↑/↓] Scroll | [o] Toggle stdout/stderr | [q] Close ";
 
         let log_text = match (self.file_status, self.content.is_empty()) {
-            (LogFileStatus::NotFound, _) => match self.current_tab {
-                LogTab::StdOut => format!(
-                    "No stdout log file found for job {}",
-                    self.job_id.as_deref().unwrap_or("unknown")
-                ),
-                LogTab::StdErr => format!(
-                    "No stderr log file found for job {}",
-                    self.job_id.as_deref().unwrap_or("unknown")
-                ),
-            },
-            // (LogFileStatus::Waiting, true) => format!(
-            //     "Loading {} log content for job {}...",
-            //     self.current_tab.as_str(),
-            //     self.job_id.as_deref().unwrap_or("unknown")
-            // ),
-            (LogFileStatus::Error, _) => self.content.clone(),
+            (LogFileStatus::NotFound, _) => format!(
+                "No {} log file found for job {}",
+                self.current_tab.as_str(),
+                self.job_id.as_deref().unwrap_or("unknown")
+            ),
             _ => self.content.clone(),
         };
 
