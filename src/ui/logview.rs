@@ -271,9 +271,9 @@ impl LogView {
             log_area.height as usize,
             log_area.width as usize,
             self.scroll_position,
-            true,
+            false,
         );
-        eprintln!("fit_text: {}", fit_text);
+        eprintln!("fit_text: {}", log_text);
 
         let log_paragraph = Paragraph::new(fit_text)
             .style(Style::default().fg(Color::White))
@@ -289,11 +289,29 @@ impl LogView {
         frame.render_widget(log_paragraph, log_area);
     }
 
-    fn fit_text(s: &str, lines: usize, cols: usize, offset: usize, wrap: bool) -> Text {
-        let s = s.rsplit_once(&['\r', '\n']).map_or(s, |(p, _)| p); // skip everything after last line delimiter
-        let l = s.lines().flat_map(|l| l.split('\r')); // bandaid for term escape codes
+    fn fit_text(s: &str, lines: usize, cols: usize, offset: usize, _wrap: bool) -> Text {
+        // Process text by handling carriage returns
+        let processed_lines: Vec<String> = s
+            .lines()
+            .map(|line| {
+                // For each line, if it contains carriage returns, keep only the content after the last one
+                if line.contains('\r') {
+                    let parts: Vec<&str> = line.split('\r').collect();
+                    parts.last().unwrap_or(&"").to_string()
+                } else {
+                    line.to_string()
+                }
+            })
+            .collect();
 
-        let iter = l
+        // Join the processed lines back together
+        let processed_text = processed_lines.join("\n");
+
+        // Process the clean text (without intermediate carriage returns)
+        let lines_iter = processed_text.lines();
+
+        // Create the iterator for processing text lines
+        let line_spans = lines_iter
             .rev()
             .skip(offset)
             .flat_map(|l| {
@@ -303,11 +321,11 @@ impl LogView {
                     .enumerate()
                     .map(|(i, chunk)| {
                         if i == 0 {
-                            Line::raw(chunk)
+                            Line::raw(chunk.to_string())
                         } else {
                             Line::default().spans(vec![
                                 Span::styled("↪ ", Style::default().add_modifier(Modifier::DIM)),
-                                Span::raw(chunk),
+                                Span::raw(chunk.to_string()),
                             ])
                         }
                     })
@@ -315,12 +333,9 @@ impl LogView {
             })
             .take(lines);
 
-        Text::from(
-            iter.collect::<Vec<_>>()
-                .into_iter()
-                .rev()
-                .collect::<Vec<_>>(),
-        )
+        // Collect and build the final Text widget
+        let collected_lines: Vec<Line> = line_spans.collect();
+        Text::from(collected_lines.into_iter().rev().collect::<Vec<Line>>())
     }
 
     fn chunked_string(s: &str, first_chunk_size: usize, chunk_size: usize) -> Vec<&str> {
