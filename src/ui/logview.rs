@@ -51,7 +51,7 @@ pub struct LogView {
     pub stderr_path: Option<String>,
     file_watcher: Option<FileWatcherHandle>,
     file_receiver: Option<Receiver<Result<String, FileWatcherError>>>,
-    last_refresh: Option<Instant>,
+    // last_refresh: Option<Instant>,
     refresh_interval: Duration,
     /// Indicates the status of the current log file
     file_status: LogFileStatus,
@@ -82,7 +82,7 @@ impl LogView {
             stderr_path: None,
             file_watcher: None,
             file_receiver: None,
-            last_refresh: None,
+            // last_refresh: None,
             refresh_interval: Duration::from_secs(2),
             file_status: LogFileStatus::NotFound,
         }
@@ -124,15 +124,12 @@ impl LogView {
 
         // Update the watched file based on current tab
         self.update_watched_file();
-        self.check_refresh();
     }
 
     /// Toggle between stdout and stderr logs
     pub fn toggle_tab(&mut self) {
         self.current_tab.toggle();
-        self.content = String::new();
         self.scroll_position = 0;
-        self.file_status = LogFileStatus::NotFound;
         self.update_watched_file();
     }
 
@@ -158,30 +155,39 @@ impl LogView {
                 }
             }
         }
+        self.check_refresh();
     }
 
     /// Check for file updates and refresh content
     pub fn check_refresh(&mut self) {
-        // Check if we need to refresh
-        let should_refresh = match self.last_refresh {
-            Some(instant) => instant.elapsed() >= self.refresh_interval,
-            None => true,
-        };
+        // // Check if we need to refresh
+        // // let should_refresh = match self.last_refresh {
+        // //     Some(instant) => instant.elapsed() >= self.refresh_interval,
+        // //     None => true,
+        // // };
+        // // if instant is true, we always refresh, if not, we check the interval
+        // let should_refresh = if instant {
+        //     true
+        // } else {
+        //     self.last_refresh
+        //         .map_or(true, |instant| instant.elapsed() >= self.refresh_interval)
+        // };
 
-        if should_refresh && self.file_receiver.is_some() {
+        if self.file_receiver.is_some() {
             let receiver = self.file_receiver.as_ref().unwrap();
 
             // Check for new content from the file watcher
             while let Ok(result) = receiver.try_recv() {
                 match result {
                     Ok(content) => {
-                        if !content.is_empty() {
-                            self.content = content;
-                            self.file_status = LogFileStatus::Loaded;
-                        } else if self.file_status == LogFileStatus::Waiting {
-                            // Got empty content but file exists, keep waiting
-                            self.file_status = LogFileStatus::Waiting;
-                        }
+                        // if !content.is_empty() {
+                        //     self.content = content;
+                        //     self.file_status = LogFileStatus::Loaded;
+                        // } else if self.file_status == LogFileStatus::Waiting {
+                        //     // Got empty content but file exists, keep waiting
+                        //     self.file_status = LogFileStatus::Waiting;
+                        // }
+                        self.content = content;
                     }
                     Err(e) => {
                         self.content = format!("Error watching file: {}", e);
@@ -190,7 +196,7 @@ impl LogView {
                 }
             }
 
-            self.last_refresh = Some(Instant::now());
+            // self.last_refresh = Some(Instant::now());
         }
     }
 
@@ -257,11 +263,11 @@ impl LogView {
                     self.job_id.as_deref().unwrap_or("unknown")
                 ),
             },
-            (LogFileStatus::Waiting, true) => format!(
-                "Loading {} log content for job {}...",
-                self.current_tab.as_str(),
-                self.job_id.as_deref().unwrap_or("unknown")
-            ),
+            // (LogFileStatus::Waiting, true) => format!(
+            //     "Loading {} log content for job {}...",
+            //     self.current_tab.as_str(),
+            //     self.job_id.as_deref().unwrap_or("unknown")
+            // ),
             (LogFileStatus::Error, _) => self.content.clone(),
             _ => self.content.clone(),
         };
@@ -273,7 +279,7 @@ impl LogView {
             self.scroll_position,
             false,
         );
-        eprintln!("fit_text: {}", log_text);
+        // eprintln!("fit_text: {}", log_text);
 
         let log_paragraph = Paragraph::new(fit_text)
             .style(Style::default().fg(Color::White))
