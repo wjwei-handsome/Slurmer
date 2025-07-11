@@ -1,5 +1,6 @@
 use color_eyre::Result;
 use crossbeam::channel::{Receiver, unbounded};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
     Frame,
     layout::Rect,
@@ -272,6 +273,38 @@ impl LogView {
             .scroll((self.scroll_position as u16, 0));
 
         frame.render_widget(log_paragraph, log_area);
+    }
+
+    pub fn handle_key(&mut self, key: KeyEvent) -> () {
+        match (key.modifiers, key.code) {
+            (_, KeyCode::Char('o')) => {
+                // Toggle between stdout and stderr logs
+                self.toggle_tab();
+            }
+            (_, KeyCode::Char('q')) => {
+                // Close the log view
+                self.hide();
+            }
+            (_, KeyCode::Up) => {
+                // Scroll up
+                self.scroll_up();
+            }
+            (_, KeyCode::Down) => {
+                // Scroll down
+                self.scroll_down();
+            }
+            (_, KeyCode::PageUp) | (KeyModifiers::CONTROL, KeyCode::Char('u')) => {
+                // Page up
+                self.page_up();
+            }
+            (_, KeyCode::PageDown) | (KeyModifiers::CONTROL, KeyCode::Char('d')) => {
+                // Page down
+                self.page_down();
+            }
+            _ => {
+                // Ignore other keys
+            }
+        }
     }
 
     fn fit_text(s: &str, lines: usize, cols: usize, offset: usize, _wrap: bool) -> Text {

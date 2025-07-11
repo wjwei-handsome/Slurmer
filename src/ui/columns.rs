@@ -204,6 +204,8 @@ pub struct ColumnsPopup {
     pub selected_columns: Vec<JobColumn>,
     /// Sort columns with their order
     pub sort_columns: Vec<SortColumn>,
+    /// If show
+    pub visible: bool,
 }
 
 impl ColumnsPopup {
@@ -235,6 +237,7 @@ impl ColumnsPopup {
             available_columns,
             selected_columns,
             sort_columns,
+            visible: false,
         }
     }
 
@@ -476,6 +479,12 @@ impl ColumnsPopup {
                     _ => {}
                 }
             }
+
+            // Ctrl+A to apply changes
+            KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                return ColumnsAction::Apply;
+            }
+
             // F10 or Ctrl+S to save settings
             KeyCode::F(10) => return ColumnsAction::SaveAndApply,
             KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {

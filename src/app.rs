@@ -3,9 +3,8 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent
 use ratatui::{
     Frame,
     layout::Rect,
-    style::{Color, Style},
-    text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    style::Style,
+    widgets::{Block, Borders, Clear, Paragraph},
 };
 use regex;
 use std::time::{Duration, Instant};
@@ -17,7 +16,7 @@ use crate::{
         columns::{ColumnsAction, ColumnsPopup, JobColumn, SortColumn, SortOrder},
         filter::{FilterAction, FilterPopup},
         jobslist::JobsList,
-        layout::{centered_popup_area, draw_main_layout},
+        layout::{centered_popup_area, draw_footer, draw_header, draw_main_layout},
         logview::LogView,
     },
     utils::{
@@ -40,14 +39,10 @@ pub struct App {
     pub runtime: Runtime,
     /// Last time jobs were refreshed
     pub last_refresh: Instant,
-    /// Is the filter popup visible?
-    pub show_filter_popup: bool,
     /// Filter popup state
     pub filter_popup: FilterPopup,
     /// Is the job detail popup visible?
     pub show_job_detail: bool,
-    /// Is the columns management popup visible?
-    pub show_columns_popup: bool,
     /// Columns popup state
     pub columns_popup: ColumnsPopup,
     /// Log view state
@@ -57,7 +52,7 @@ pub struct App {
     /// Status message display timeout
     pub status_timeout: Option<Instant>,
     /// Auto-refresh interval in seconds
-    pub refresh_interval: u64,
+    pub job_refresh_interval: u64,
     /// Available partitions
     pub available_partitions: Vec<String>,
     /// Available QOS options
@@ -101,15 +96,13 @@ impl App {
             squeue_options,
             runtime,
             last_refresh: Instant::now(),
-            show_filter_popup: false,
             filter_popup: FilterPopup::new(),
             show_job_detail: false,
-            show_columns_popup: false,
             columns_popup: ColumnsPopup::new(selected_columns.clone(), sort_columns.clone()),
             log_view: LogView::new(),
             status_message: String::new(),
             status_timeout: None,
-            refresh_interval: 10, // Default to 10 seconds refresh
+            job_refresh_interval: 10, // Default to 10 seconds refresh
             available_partitions,
             available_qos,
             selected_columns,
@@ -126,14 +119,14 @@ impl App {
         self.refresh_jobs()?;
 
         // Initialize filter popup with current options
-        self.filter_popup.initialize(&self.squeue_options);
+        // self.filter_popup.initialize(&self.squeue_options);
 
         // Update squeue format string based on selected columns
-        self.update_squeue_format();
+        // self.update_squeue_format();
 
         // Ensure the column popup has the correct initial state
-        self.columns_popup =
-            ColumnsPopup::new(self.selected_columns.clone(), self.sort_columns.clone());
+        // self.columns_popup =
+        //     ColumnsPopup::new(self.selected_columns.clone(), self.sort_columns.clone());
 
         while self.running {
             terminal.draw(|frame| self.render(frame))?;
@@ -258,14 +251,13 @@ impl App {
         // Draw jobs list in the main content area with current column settings
         // Make sure to still render the jobs list even when log view is visible
         // so that the jobs list is updated when user navigates with SHIFT+arrow keys
-        self.jobs_list
-            .render(frame, areas[1], &self.selected_columns, &self.sort_columns);
+        self.render_joblist(frame, areas[1]);
 
         // Draw the footer with controls
-        crate::ui::layout::draw_footer(frame, areas[2], "");
+        self.render_footer(frame, areas[2]);
 
         // If filter popup is visible, draw it
-        if self.show_filter_popup {
+        if self.filter_popup.visible {
             let popup_area = centered_popup_area(frame.area(), 80, 80);
             self.render_filter_popup(frame, popup_area);
         }
@@ -277,21 +269,41 @@ impl App {
         }
 
         // If columns popup is visible, draw it
-        if self.show_columns_popup {
+        if self.columns_popup.visible {
             let popup_area = centered_popup_area(frame.area(), 80, 80);
-            self.columns_popup.render(frame, popup_area);
+            self.render_columns_popup(frame, popup_area);
         }
 
         // If log view is visible, draw it and check if we need to refresh its content
         if self.log_view.visible {
             let popup_area = centered_popup_area(frame.area(), 80, 80);
-            self.log_view.render(frame, popup_area);
+            self.render_log_view(frame, popup_area);
         }
+    }
+
+    /// Render the joblist
+    fn render_joblist(&mut self, frame: &mut Frame, area: Rect) {
+        // Draw the jobs list in the main content area with current column settings
+        self.jobs_list
+            .render(frame, area, &self.selected_columns, &self.sort_columns);
+    }
+
+    /// Render the columns management popup
+    fn render_columns_popup(&mut self, frame: &mut Frame, area: Rect) {
+        // Render the columns management popup
+        self.columns_popup.render(frame, area);
+    }
+
+    /// Render the log view
+    fn render_log_view(&mut self, frame: &mut Frame, area: Rect) {
+        // Render the log view if it's visible
+        self.log_view.render(frame, area);
     }
 
     /// Render the filter popup
     fn render_filter_popup(&mut self, frame: &mut Frame, area: Rect) {
         // All possible job states for the filter
+        // TODO: replace it
         let all_states = [
             crate::slurm::JobState::Pending,
             crate::slurm::JobState::Running,
@@ -316,27 +328,9 @@ impl App {
 
     /// Render job detail popup
     fn render_job_detail(&self, frame: &mut Frame, area: Rect) {
+        frame.render_widget(Clear, area);
         if let Some(job) = self.jobs_list.selected_job() {
-            let detail_text = format!(
-                "Job ID: {}\n\
-                 Name: {}\n\
-                 User: {}\n\
-                 State: {}\n\
-                 Partition: {}\n\
-                 QoS: {}\n\
-                 Nodes: {}\n\
-                 CPUs: {}\n\
-                 Time: {}",
-                job.id,
-                job.name,
-                job.user,
-                job.state,
-                job.partition,
-                job.qos,
-                job.nodes,
-                job.cpus,
-                job.time
-            );
+            let detail_text = "abc\nabc";
 
             let job_detail = Paragraph::new(detail_text)
                 .block(
@@ -354,6 +348,15 @@ impl App {
 
             frame.render_widget(job_detail, area);
         }
+    }
+
+    /// Render the footer with XXX TODO:replace it
+    fn render_footer(&self, frame: &mut Frame, area: Rect) {
+        // Prepare footer text
+        let footer_text = "";
+
+        // Draw the footer
+        draw_footer(frame, area, footer_text);
     }
 
     /// Render the header with status information
@@ -381,12 +384,12 @@ impl App {
         }
 
         // Draw the header with status information
-        crate::ui::layout::draw_header(
+        draw_header(
             frame,
             area,
             &status_text,
             self.last_refresh.elapsed(),
-            self.refresh_interval,
+            self.job_refresh_interval,
         );
     }
 
@@ -410,14 +413,14 @@ impl App {
             (_, KeyCode::Char('q'))
             | (_, KeyCode::Esc)
             | (KeyModifiers::CONTROL, KeyCode::Char('c')) => {
-                if self.show_filter_popup
+                if self.filter_popup.visible
                     || self.show_job_detail
-                    || self.show_columns_popup
+                    || self.columns_popup.visible
                     || self.log_view.visible
                 {
-                    self.show_filter_popup = false;
+                    self.filter_popup.visible = false;
                     self.show_job_detail = false;
-                    self.show_columns_popup = false;
+                    self.columns_popup.visible = false;
                     self.log_view.hide();
                 } else {
                     self.quit();
@@ -425,25 +428,25 @@ impl App {
             }
 
             // Filter toggle
-            (_, KeyCode::Char('f')) if !self.show_job_detail && !self.show_filter_popup => {
-                self.show_filter_popup = true;
+            (_, KeyCode::Char('f')) if !self.show_job_detail && !self.filter_popup.visible => {
+                self.filter_popup.visible = true;
                 // Initialize filter popup with current options
                 self.filter_popup.initialize(&self.squeue_options);
             }
 
             // Navigation
             (_, KeyCode::Up)
-                if !self.show_filter_popup
+                if !self.filter_popup.visible
                     && !self.show_job_detail
-                    && !self.show_columns_popup
+                    && !self.columns_popup.visible
                     && !self.log_view.visible =>
             {
                 self.jobs_list.previous();
             }
             (_, KeyCode::Down)
-                if !self.show_filter_popup
+                if !self.filter_popup.visible
                     && !self.show_job_detail
-                    && !self.show_columns_popup
+                    && !self.columns_popup.visible
                     && !self.log_view.visible =>
             {
                 self.jobs_list.next();
@@ -451,22 +454,26 @@ impl App {
 
             // Selection
             (_, KeyCode::Char(' '))
-                if !self.show_filter_popup && !self.show_job_detail && !self.show_columns_popup =>
+                if !self.filter_popup.visible
+                    && !self.show_job_detail
+                    && !self.columns_popup.visible =>
             {
                 self.jobs_list.toggle_select();
             }
 
             // Column management popup
             (_, KeyCode::Char('c'))
-                if !self.show_filter_popup && !self.show_job_detail && !self.show_columns_popup =>
+                if !self.filter_popup.visible
+                    && !self.show_job_detail
+                    && !self.columns_popup.visible =>
             {
-                self.show_columns_popup = true;
+                self.columns_popup.visible = true;
                 self.columns_popup =
                     ColumnsPopup::new(self.selected_columns.clone(), self.sort_columns.clone());
             }
 
             // Handle filter popup key events
-            _ if self.show_filter_popup => {
+            _ if self.filter_popup.visible => {
                 let action = self.filter_popup.handle_key(
                     key,
                     &mut self.squeue_options,
@@ -487,10 +494,10 @@ impl App {
 
                 match action {
                     FilterAction::Close => {
-                        self.show_filter_popup = false;
+                        self.filter_popup.visible = false;
                     }
                     FilterAction::Apply => {
-                        self.show_filter_popup = false;
+                        self.filter_popup.visible = false;
                         if let Err(e) = self.apply_filters() {
                             self.set_status_message(format!("Failed to apply filters: {}", e), 3);
                         }
@@ -501,9 +508,9 @@ impl App {
 
             // Job detail view
             (_, KeyCode::Enter)
-                if !self.show_filter_popup
+                if !self.filter_popup.visible
                     && !self.show_job_detail
-                    && !self.show_columns_popup
+                    && !self.columns_popup.visible
                     && !self.log_view.visible =>
             {
                 if self.jobs_list.selected_job().is_some() {
@@ -512,15 +519,15 @@ impl App {
             }
 
             // Close job detail view
-            (_, KeyCode::Enter | KeyCode::Esc) if self.show_job_detail => {
+            (_, KeyCode::Enter) if self.show_job_detail => {
                 self.show_job_detail = false;
             }
 
             // Show log view
             (_, KeyCode::Char('v'))
-                if !self.show_filter_popup
+                if !self.filter_popup.visible
                     && !self.show_job_detail
-                    && !self.show_columns_popup
+                    && !self.columns_popup.visible
                     && !self.log_view.visible =>
             {
                 if let Some(job) = self.jobs_list.selected_job() {
@@ -528,57 +535,40 @@ impl App {
                 }
             }
 
-            // Handle log view key events
-            (_, KeyCode::Char('o')) if self.log_view.visible => {
-                self.log_view.toggle_tab();
-            }
-
-            (_, KeyCode::Up) if self.log_view.visible => {
+            // Change job for log view
+            (KeyModifiers::SHIFT, KeyCode::Up) if self.log_view.visible => {
                 // If Shift is pressed, switch to previous job and show its logs
-                if key.modifiers.contains(KeyModifiers::SHIFT) {
-                    if self.jobs_list.previous() {
-                        if let Some(job) = self.jobs_list.selected_job() {
-                            self.log_view.change_job(job.id.clone());
-                        }
+                if self.jobs_list.previous() {
+                    if let Some(job) = self.jobs_list.selected_job() {
+                        self.log_view.change_job(job.id.clone());
                     }
-                } else {
-                    // Normal scrolling behavior
-                    self.log_view.scroll_up();
                 }
             }
-
-            (_, KeyCode::Down) if self.log_view.visible => {
+            (KeyModifiers::SHIFT, KeyCode::Down) if self.log_view.visible => {
                 // If Shift is pressed, switch to next job and show its logs
-                if key.modifiers.contains(KeyModifiers::SHIFT) {
-                    if self.jobs_list.next() {
-                        if let Some(job) = self.jobs_list.selected_job() {
-                            self.log_view.change_job(job.id.clone());
-                        }
+                if self.jobs_list.next() {
+                    if let Some(job) = self.jobs_list.selected_job() {
+                        self.log_view.change_job(job.id.clone());
                     }
-                } else {
-                    // Normal scrolling behavior
-                    self.log_view.scroll_down();
                 }
             }
 
-            (KeyModifiers::CONTROL, KeyCode::Char('u')) if self.log_view.visible => {
-                self.log_view.page_up();
-            }
-
-            (KeyModifiers::CONTROL, KeyCode::Char('d')) if self.log_view.visible => {
-                self.log_view.page_down();
+            // Handle log view keys events
+            _ if self.log_view.visible => {
+                // If log view is visible, handle log view specific keys
+                self.log_view.handle_key(key);
             }
 
             // Handle columns popup key events
-            _ if self.show_columns_popup => {
+            _ if self.columns_popup.visible => {
                 let action = self.columns_popup.handle_key(key);
 
                 match action {
                     ColumnsAction::Close => {
-                        self.show_columns_popup = false;
+                        self.columns_popup.visible = false;
                     }
                     ColumnsAction::Apply => {
-                        self.show_columns_popup = false;
+                        self.columns_popup.visible = false;
                         self.selected_columns = self.columns_popup.selected_columns.clone();
                         self.sort_columns = self.columns_popup.sort_columns.clone();
 
@@ -590,7 +580,7 @@ impl App {
                         }
                     }
                     ColumnsAction::SaveAndApply => {
-                        self.show_columns_popup = false;
+                        self.columns_popup.visible = false;
                         self.selected_columns = self.columns_popup.selected_columns.clone();
                         self.sort_columns = self.columns_popup.sort_columns.clone();
 
@@ -608,7 +598,9 @@ impl App {
 
             // Refresh jobs
             (_, KeyCode::Char('r'))
-                if !self.show_filter_popup && !self.show_job_detail && !self.show_columns_popup =>
+                if !self.filter_popup.visible
+                    && !self.show_job_detail
+                    && !self.columns_popup.visible =>
             {
                 if let Err(e) = self.refresh_jobs() {
                     self.set_status_message(format!("Failed to refresh: {}", e), 3);
@@ -627,10 +619,10 @@ impl App {
     /// Handle tick events (called periodically)
     fn handle_tick(&mut self) {
         // Check if it's time to auto-refresh
-        if !self.show_filter_popup
+        if !self.filter_popup.visible
             && !self.show_job_detail
-            && !self.show_columns_popup
-            && self.last_refresh.elapsed().as_secs() >= self.refresh_interval
+            && !self.columns_popup.visible
+            && self.last_refresh.elapsed().as_secs() >= self.job_refresh_interval
         {
             if let Err(e) = self.refresh_jobs() {
                 self.set_status_message(format!("Auto-refresh failed: {}", e), 3);
@@ -650,79 +642,15 @@ impl App {
     }
 
     /// Set the auto-refresh interval in seconds
+    /// TODO: maybe used it in the future
     pub fn set_refresh_interval(&mut self, seconds: u64) {
-        self.refresh_interval = seconds;
+        self.job_refresh_interval = seconds;
         self.set_status_message(format!("Auto-refresh interval set to {}s", seconds), 3);
-    }
-
-    /// Toggle a job state filter
-    pub fn toggle_state_filter(&mut self, state: crate::slurm::JobState) {
-        let state_pos = self.squeue_options.states.iter().position(|s| *s == state);
-
-        if let Some(pos) = state_pos {
-            self.squeue_options.states.remove(pos);
-        } else {
-            self.squeue_options.states.push(state);
-        }
-    }
-
-    /// Toggle a partition filter
-    pub fn toggle_partition_filter(&mut self, partition: String) {
-        let partition_pos = self
-            .squeue_options
-            .partitions
-            .iter()
-            .position(|p| *p == partition);
-
-        if let Some(pos) = partition_pos {
-            self.squeue_options.partitions.remove(pos);
-        } else {
-            self.squeue_options.partitions.push(partition);
-        }
-    }
-
-    /// Toggle a QOS filter
-    pub fn toggle_qos_filter(&mut self, qos: String) {
-        let qos_pos = self.squeue_options.qos.iter().position(|q| *q == qos);
-
-        if let Some(pos) = qos_pos {
-            self.squeue_options.qos.remove(pos);
-        } else {
-            self.squeue_options.qos.push(qos);
-        }
-    }
-
-    /// Set the job name filter
-    pub fn set_name_filter(&mut self, name: String) {
-        // Store the regex pattern as is - it will be applied in refresh_jobs
-        if name.is_empty() {
-            self.squeue_options.name_filter = None;
-        } else {
-            // Validate regex pattern
-            match regex::Regex::new(&name) {
-                Ok(_) => self.squeue_options.name_filter = Some(name),
-                Err(e) => self.set_status_message(format!("Invalid name regex pattern: {}", e), 3),
-            }
-        }
-    }
-
-    /// Set the node filter
-    pub fn set_node_filter(&mut self, node: String) {
-        // Store the regex pattern as is - it will be applied in refresh_jobs
-        if node.is_empty() {
-            self.squeue_options.node_filter = None;
-        } else {
-            // Validate regex pattern
-            match regex::Regex::new(&node) {
-                Ok(_) => self.squeue_options.node_filter = Some(node),
-                Err(e) => self.set_status_message(format!("Invalid node regex pattern: {}", e), 3),
-            }
-        }
     }
 
     /// Apply all filter changes and refresh jobs
     pub fn apply_filters(&mut self) -> Result<()> {
-        self.show_filter_popup = false;
+        self.filter_popup.visible = false;
         self.set_status_message("Applying filters...".to_string(), 3);
 
         // Ensure we refresh the jobs with the updated filters
@@ -806,10 +734,10 @@ impl App {
     /// Update the squeue format string and sort options based on selected columns
     fn update_squeue_format(&mut self) {
         // Ensure we have at least one column selected
-        if self.selected_columns.is_empty() {
-            // Use default columns if none are selected
-            self.selected_columns = JobColumn::defaults();
-        }
+        // if self.selected_columns.is_empty() {
+        //     // Use default columns if none are selected
+        //     self.selected_columns = JobColumn::defaults();
+        // }
 
         // Generate format string for squeue based on column selection
         let format_string = self

@@ -34,6 +34,8 @@ pub struct FilterPopup {
     pub name_regex_valid: Option<bool>,
     /// Whether the node regex is valid
     pub node_regex_valid: Option<bool>,
+    /// If visible
+    pub visible: bool,
 }
 
 /// Which field is currently focused in the filter popup
@@ -73,6 +75,7 @@ impl FilterPopup {
             node_filter: String::new(),
             name_regex_valid: None,
             node_regex_valid: None,
+            visible: false,
         }
     }
 
