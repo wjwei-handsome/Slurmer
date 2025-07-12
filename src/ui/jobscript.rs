@@ -101,7 +101,7 @@ impl JobScript {
             None => String::from("Job Script"),
         };
 
-        let help_text = " [↑/↓] Scroll | [l] Toggle Line Numbers | [q] Close ";
+        let help_text = " [↑/↓] Scroll | [Ctrl+u/d] PageUp/Down | [q] Close ";
 
         // Create text with line numbers if enabled
         let text = self.create_display_text();

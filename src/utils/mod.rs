@@ -7,7 +7,7 @@ pub fn get_username() -> String {
 }
 
 /// Truncate a string to a maximum length, appending an ellipsis if truncated
-pub fn truncate_string(s: &str, max_len: usize) -> String {
+pub fn _truncate_string(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         s.to_string()
     } else {
@@ -16,7 +16,7 @@ pub fn truncate_string(s: &str, max_len: usize) -> String {
 }
 
 /// Format memory size to a human-readable string
-pub fn format_memory(memory_mb: u64) -> String {
+pub fn _format_memory(memory_mb: u64) -> String {
     if memory_mb < 1024 {
         format!("{}M", memory_mb)
     } else {
@@ -25,7 +25,7 @@ pub fn format_memory(memory_mb: u64) -> String {
 }
 
 /// Format time duration in a human-readable format
-pub fn format_duration(seconds: u64) -> String {
+pub fn _format_duration(seconds: u64) -> String {
     let days = seconds / (24 * 3600);
     let hours = (seconds % (24 * 3600)) / 3600;
     let minutes = (seconds % 3600) / 60;

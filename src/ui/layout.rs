@@ -1,9 +1,9 @@
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style, Stylize},
+    style::{Color, Style, Stylize},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Paragraph, Tabs},
+    widgets::{Block, Borders, Paragraph},
 };
 use std::time::Duration;
 
@@ -81,42 +81,34 @@ pub fn draw_header(
     frame.render_widget(status, header_chunks[1]);
 }
 
-/// Draws tabs for different views
-pub fn draw_tabs(frame: &mut Frame, area: Rect, titles: &[&str], active_tab: usize) {
-    let tab_titles: Vec<Line> = titles
-        .iter()
-        .map(|t| Line::from(Span::styled(*t, Style::default().fg(Color::White))))
-        .collect();
-
-    let tabs = Tabs::new(tab_titles)
-        .block(Block::default().borders(Borders::ALL))
-        .select(active_tab)
-        .highlight_style(Style::default().fg(Color::Cyan).bold());
-
-    frame.render_widget(tabs, area);
-}
-
 /// Draws the application footer with help text and status
 pub fn draw_footer(frame: &mut Frame, area: Rect, status_text: &str) {
     // Render controls directly in the footer area
     // Controls (lower part of footer)
+    // TODO: use status_text here
     let footer_text = vec![
         Span::styled("q", Style::default().fg(Color::Cyan)),
         Span::raw(": Quit | "),
         Span::styled("↑/↓", Style::default().fg(Color::Cyan)),
         Span::raw(": Navigate | "),
-        Span::styled("Enter", Style::default().fg(Color::Cyan)),
+        Span::styled("Space |", Style::default().fg(Color::Cyan)),
         Span::raw(": Select | "),
+        Span::styled("Enter", Style::default().fg(Color::Cyan)),
+        Span::raw(": View Script | "),
         Span::styled("f", Style::default().fg(Color::Cyan)),
         Span::raw(": Filter | "),
         Span::styled("c", Style::default().fg(Color::Cyan)),
         Span::raw(": Columns | "),
         Span::styled("v", Style::default().fg(Color::Cyan)),
-        Span::raw(": ViewLog | "),
+        Span::raw(": View Log | "),
         Span::styled("a", Style::default().fg(Color::Cyan)),
         Span::raw(": SelectAll | "),
         Span::styled("r", Style::default().fg(Color::Cyan)),
         Span::raw(": Refresh"),
+        Span::raw(" | "),
+        // status_text
+        Span::styled("Status: ", Style::default().fg(Color::Cyan)),
+        Span::raw(status_text),
     ];
 
     let footer =

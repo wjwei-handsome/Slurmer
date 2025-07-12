@@ -1,7 +1,4 @@
-use color_eyre::Result;
-use crossterm::event::{
-    self, Event as CrosstermEvent, KeyCode, KeyEvent, KeyModifiers, MouseEvent,
-};
+use crossterm::event::{self, Event as CrosstermEvent, KeyEvent, MouseEvent};
 use std::{
     sync::mpsc,
     thread,
@@ -18,6 +15,7 @@ pub enum Event {
     /// Mouse click/scroll event
     Mouse(MouseEvent),
     /// Terminal resize event
+    #[allow(dead_code)]
     Resize(u16, u16),
 }
 
@@ -44,8 +42,10 @@ pub struct EventHandler {
     /// Event receiver channel
     pub rx: mpsc::Receiver<Event>,
     /// Event sender channel
+    #[allow(dead_code)]
     tx: mpsc::Sender<Event>,
     /// Thread handle for the event handler
+    #[allow(dead_code)]
     handle: thread::JoinHandle<()>,
 }
 
@@ -72,6 +72,9 @@ impl EventHandler {
                                 }
                             }
                             CrosstermEvent::Mouse(mouse) => {
+                                if !config.enable_mouse_capture {
+                                    continue;
+                                }
                                 if tx.send(Event::Mouse(mouse)).is_err() {
                                     return;
                                 }

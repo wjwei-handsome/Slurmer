@@ -1,9 +1,7 @@
-use color_eyre::Result;
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Rect},
     style::{Color, Modifier, Style},
-    text::{Line, Span},
     widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState},
 };
 
@@ -159,7 +157,7 @@ impl JobsList {
         let headers: Vec<&str> = columns.iter().map(|col| col.title()).collect();
 
         // Create header cells with appropriate styling
-        let header_cells = headers.iter().enumerate().map(|(i, &h)| {
+        let header_cells = headers.iter().enumerate().map(|(_i, &h)| {
             // Check if this column is in the sort list
             let is_sort_column = sort_columns.iter().any(|sc| sc.column.title() == h);
             let sort_indicator = if is_sort_column {
