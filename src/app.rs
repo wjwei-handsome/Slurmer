@@ -283,6 +283,7 @@ impl App {
 
         // If columns popup is visible, draw it
         if self.columns_popup.visible {
+            eprintln!("fuckkkkk");
             let popup_area = centered_popup_area(frame.area(), 80, 80);
             self.render_columns_popup(frame, popup_area);
         }
@@ -518,11 +519,12 @@ impl App {
             (_, KeyCode::Char('c'))
                 if !self.filter_popup.visible
                     && !self.script_view.visible
-                    && !self.columns_popup.visible =>
+                    && !self.columns_popup.visible
+                    && !self.cancel_confirm =>
             {
-                self.columns_popup.visible = true;
                 self.columns_popup =
                     ColumnsPopup::new(self.selected_columns.clone(), self.sort_columns.clone());
+                self.columns_popup.visible = true;
             }
 
             // Handle filter popup key events

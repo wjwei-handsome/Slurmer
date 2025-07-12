@@ -2,7 +2,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
     Frame,
     layout::Rect,
-    style::{Color, Style},
+    style::{Color, Modifier, Style},
     text::{Line, Span, Text},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
@@ -15,18 +15,19 @@ pub struct JobScript {
     pub content: String,
     pub scroll_position: usize,
     pub script_path: Option<String>,
-    pub show_line_numbers: bool,
+    pub use_bat: bool, // If bat exists, use it for syntax highlighting
 }
 
 impl JobScript {
     pub fn new() -> Self {
+        let use_bat = is_bat_installed();
         Self {
             visible: false,
             job_id: None,
             content: String::new(),
             scroll_position: 0,
             script_path: None,
-            show_line_numbers: true, // Enable line numbers by default
+            use_bat,
         }
     }
 
@@ -49,11 +50,6 @@ impl JobScript {
 
         // Fetch the script content
         self.fetch_script_content();
-    }
-
-    /// Toggle line numbers display
-    pub fn toggle_line_numbers(&mut self) {
-        self.show_line_numbers = !self.show_line_numbers;
     }
 
     /// Scroll the script view up
@@ -108,10 +104,11 @@ impl JobScript {
         let help_text = " [↑/↓] Scroll | [l] Toggle Line Numbers | [q] Close ";
 
         // Create text with line numbers if enabled
-        let text = self.create_display_text(area.height as usize - 2, area.width as usize - 2);
+        let text = self.create_display_text();
 
         let script_paragraph = Paragraph::new(text)
-            .style(Style::default().fg(Color::White))
+            // .style(Style::default().fg(Color::White))
+            // .style(Style::default().bg(Color::LightCyan))
             .block(
                 Block::default()
                     .title(format!("{}{}", title, help_text))
@@ -126,10 +123,6 @@ impl JobScript {
 
     pub fn handle_key(&mut self, key: KeyEvent) -> () {
         match (key.modifiers, key.code) {
-            (_, KeyCode::Char('l')) => {
-                // Toggle line numbers
-                self.toggle_line_numbers();
-            }
             (_, KeyCode::Char('q')) => {
                 // Close the script view
                 self.hide();
@@ -157,16 +150,17 @@ impl JobScript {
     }
 
     /// Create display text with optional line numbers
-    fn create_display_text(&self, height: usize, width: usize) -> Text {
+    fn create_display_text(&self) -> Text {
+        if self.use_bat {
+            let lines = parse_ansi_to_spans(&self.content);
+            return Text::from(lines);
+        }
+
         let content_lines: Vec<&str> = self.content.lines().collect();
         let total_lines = content_lines.len();
 
         // Calculate the width needed for line numbers
-        let line_num_width = if self.show_line_numbers {
-            total_lines.to_string().len() + 1 // +1 for the separator
-        } else {
-            0
-        };
+        let line_num_width = total_lines.to_string().len() + 1; // +1 for the separator
 
         // Create lines with line numbers
         let mut numbered_lines: Vec<Line> = Vec::new();
@@ -175,46 +169,16 @@ impl JobScript {
             let line_num = i + 1;
             let mut spans = Vec::new();
 
-            if self.show_line_numbers {
-                spans.push(Span::styled(
-                    format!("{:>width$} ", line_num, width = line_num_width - 1),
-                    Style::default().fg(Color::DarkGray),
-                ));
-            }
+            spans.push(Span::styled(
+                format!("{:>width$} ", line_num, width = line_num_width - 1),
+                Style::default().fg(Color::DarkGray),
+            ));
 
             spans.push(Span::raw(*line));
             numbered_lines.push(Line::from(spans));
         }
 
         Text::from(numbered_lines)
-    }
-
-    /// Split a long line into chunks of specified width
-    fn split_line(line: &str, max_width: usize) -> Vec<String> {
-        if line.len() <= max_width {
-            return vec![line.to_string()];
-        }
-
-        let mut chunks = Vec::new();
-        let mut remaining = line;
-
-        while !remaining.is_empty() {
-            if remaining.len() <= max_width {
-                chunks.push(remaining.to_string());
-                break;
-            }
-
-            // Find a good split point - preferably at whitespace
-            let mut split_at = max_width;
-            while split_at > 0 && !remaining.is_char_boundary(split_at) {
-                split_at -= 1;
-            }
-
-            chunks.push(remaining[..split_at].to_string());
-            remaining = &remaining[split_at..];
-        }
-
-        chunks
     }
 
     /// Fetch the job script content using scontrol
@@ -234,6 +198,15 @@ impl JobScript {
                     if let Some(script_path) = key_value_pairs.get("Command") {
                         self.script_path = Some(script_path.to_string());
 
+                        if self.use_bat {
+                            // If bat is installed, use it to create a syntax-highlighted version
+                            if let Some(bat_output) = create_bat_out_string(script_path) {
+                                self.content = bat_output;
+                                return;
+                            }
+                        }
+                        // If bat is not available, read the script directly
+                        self.use_bat = false;
                         // Now read the script content
                         if let Ok(script_content) = std::fs::read_to_string(script_path) {
                             self.content = script_content;
@@ -242,7 +215,8 @@ impl JobScript {
                                 format!("Failed to read script from path: {}", script_path);
                         }
                     } else {
-                        self.content = String::from("No batch script found for this job");
+                        self.content =
+                            String::from("No script found for this job. Maybe it's wrapped");
                     }
                 } else {
                     self.content = String::from("Error retrieving job information");
@@ -254,6 +228,160 @@ impl JobScript {
             self.content = String::new();
         }
     }
+}
+
+/// Use bat to create a syntax-highlighted version of the script
+fn create_bat_out_string(path: &str) -> Option<String> {
+    let output = Command::new("bat")
+        .arg("--style=numbers,grid")
+        .arg("--color=always")
+        .arg("--theme=GitHub")
+        .arg("--terminal-width=100")
+        .arg(path)
+        .output();
+    if let Ok(output) = output {
+        if output.status.success() {
+            eprintln!("output:{}", String::from_utf8_lossy(&output.stdout));
+            Some(String::from_utf8_lossy(&output.stdout).to_string())
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
+/// Parse ANSI escape sequences into ratatui spans
+fn parse_ansi_to_spans(ansi_text: &str) -> Vec<Line> {
+    use regex::Regex;
+
+    // Regex to match ANSI color escape sequences
+    let ansi_escape_re = Regex::new(r"\x1B\[([0-9;]*)m").unwrap();
+    let lines = ansi_text.lines();
+    let mut result_lines = Vec::new();
+
+    let mut current_style = Style::default();
+
+    for line in lines {
+        let mut spans = Vec::new();
+        let mut last_index = 0;
+
+        // Find all ANSI escape sequences in the line
+        for cap in ansi_escape_re.captures_iter(line) {
+            let full_match = cap.get(0).unwrap();
+            let code_match = cap.get(1).unwrap();
+
+            // Get the text before this escape sequence
+            if full_match.start() > last_index {
+                let text = &line[last_index..full_match.start()];
+                spans.push(Span::styled(text, current_style));
+            }
+
+            // Update style based on the ANSI code
+            let code = code_match.as_str();
+            current_style = parse_ansi_code(code, current_style);
+
+            last_index = full_match.end();
+        }
+
+        // Add remaining text after the last escape sequence
+        if last_index < line.len() {
+            let text = &line[last_index..];
+            if !text.is_empty() {
+                spans.push(Span::styled(text, current_style));
+            }
+        }
+
+        // Reset style at end of line
+        current_style = Style::default();
+
+        // Add the line if it has spans
+        if !spans.is_empty() {
+            result_lines.push(Line::from(spans));
+        } else {
+            // Add empty line
+            result_lines.push(Line::default());
+        }
+    }
+
+    result_lines
+}
+
+/// Convert ANSI color code to ratatui Style
+fn parse_ansi_code(code: &str, mut style: Style) -> Style {
+    // Split by semicolons
+    let parts: Vec<&str> = code.split(';').collect();
+
+    // 创建迭代器以处理连续的参数
+    let mut iter = parts.iter();
+
+    while let Some(&part) = iter.next() {
+        match part {
+            "0" => {
+                // Reset all attributes
+                style = Style::default();
+            }
+            "1" => {
+                // Bold
+                style = style.add_modifier(Modifier::BOLD);
+            }
+            "3" => {
+                // Italic
+                style = style.add_modifier(Modifier::ITALIC);
+            }
+            "4" => {
+                // Underline
+                style = style.add_modifier(Modifier::UNDERLINED);
+            }
+            // 处理 256 色模式的前景色 (38;5;n)
+            "38" => {
+                if let Some(&"5") = iter.next() {
+                    if let Some(&color_idx_str) = iter.next() {
+                        if let Ok(color_idx) = color_idx_str.parse::<u8>() {
+                            style = style.fg(Color::Indexed(color_idx));
+                        }
+                    }
+                }
+            }
+            // 处理 256 色模式的背景色 (48;5;n)
+            "48" => {
+                if let Some(&"5") = iter.next() {
+                    if let Some(&color_idx_str) = iter.next() {
+                        if let Ok(color_idx) = color_idx_str.parse::<u8>() {
+                            style = style.bg(Color::Indexed(color_idx));
+                        }
+                    }
+                }
+            }
+            // 基本 16 色前景色 (30-37, 90-97)
+            s if s.len() <= 3 && s.starts_with("3") => {
+                if let Ok(idx) = s[1..].parse::<u8>() {
+                    style = style.fg(Color::Indexed(idx));
+                }
+            }
+            s if s.len() <= 3 && s.starts_with("9") => {
+                if let Ok(idx) = s[1..].parse::<u8>() {
+                    // 亮色从 ANSI 90-97 映射到 索引 8-15
+                    style = style.fg(Color::Indexed(idx + 8));
+                }
+            }
+            // 基本 16 色背景色 (40-47, 100-107)
+            s if s.len() <= 3 && s.starts_with("4") && s != "48" => {
+                if let Ok(idx) = s[1..].parse::<u8>() {
+                    style = style.bg(Color::Indexed(idx));
+                }
+            }
+            s if s.len() <= 4 && s.starts_with("10") => {
+                if let Ok(idx) = s[2..].parse::<u8>() {
+                    // 亮背景色从 ANSI 100-107 映射到 索引 8-15
+                    style = style.bg(Color::Indexed(idx + 8));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    style
 }
 
 fn parse_scontrol_output(output: &str) -> HashMap<String, String> {
@@ -268,4 +396,19 @@ fn parse_scontrol_output(output: &str) -> HashMap<String, String> {
     }
 
     result
+}
+
+/// Check if bat is installed on the system
+fn is_bat_installed() -> bool {
+    let output = Command::new("which").arg("bat").output();
+
+    match output {
+        Ok(output) => output.status.success(),
+        Err(_) => {
+            // Try the Windows "where" command as fallback
+            let windows_output = Command::new("where").arg("bat").output();
+
+            matches!(windows_output, Ok(output) if output.status.success())
+        }
+    }
 }
