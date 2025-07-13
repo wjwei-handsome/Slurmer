@@ -1,5 +1,6 @@
 use async_process::{Command, Output};
 use color_eyre::Result;
+use color_eyre::eyre::Error;
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -122,31 +123,32 @@ impl SqueueOptions {
 
 pub async fn run_squeue(options: &SqueueOptions) -> Result<Vec<Job>> {
     let args = options.to_args();
-    eprintln!("Running squeue with args: {:?}", args);
+    // eprintln!("Running squeue with args: {:?}", args);
 
     // Validate format string
     if !options.validate_format() {
-        eprintln!("Warning: Invalid format string: {}", options.format);
+        // eprintln!("Warning: Invalid format string: {}", options.format);
         return Ok(Vec::new());
     }
 
     let output = match Command::new("squeue").args(&args).output().await {
         Ok(output) => {
-            eprintln!("Running squeue command completed");
+            // eprintln!("Running squeue command completed");
             output
         }
         Err(e) => {
-            eprintln!("Error running squeue command: {}", e);
-            return Ok(Vec::new());
+            // eprintln!("Error running squeue command: {}", e);
+            // return Ok(Vec::new());
+            return Err(Error::new(e));
         }
     };
 
-    // Check if squeue returned an error
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        eprintln!("squeue returned an error: {}", stderr);
-        return Ok(Vec::new());
-    }
+    // // Check if squeue returned an error
+    // if !output.status.success() {
+    //     let stderr = String::from_utf8_lossy(&output.stderr);
+    //     eprintln!("squeue returned an error: {}", stderr);
+    //     return Ok(Vec::new());
+    // }
 
     // Pass the format options with the output to ensure correct parsing
     parse_squeue_output(&output, &options.format)
@@ -163,18 +165,18 @@ fn parse_squeue_output(output: &Output, format: &str) -> Result<Vec<Job>> {
 
     // Handle empty output
     if stdout.trim().is_empty() {
-        eprintln!("No jobs found in squeue output");
+        // eprintln!("No jobs found in squeue output");
         return Ok(jobs);
     }
 
     let format_codes: Vec<&str> = format.split('|').collect();
 
     if format_codes.is_empty() {
-        eprintln!("Warning: Empty format codes, using default format");
+        // eprintln!("Warning: Empty format codes, using default format");
         return Ok(jobs);
     }
 
-    eprintln!("Format codes: {:?}", format_codes);
+    // eprintln!("Format codes: {:?}", format_codes);
 
     for line in lines {
         if line.trim().is_empty() {
@@ -183,7 +185,7 @@ fn parse_squeue_output(output: &Output, format: &str) -> Result<Vec<Job>> {
 
         let parts: Vec<&str> = line.split('|').collect();
         if parts.is_empty() || parts.len() < format_codes.len() / 2 {
-            eprintln!("Skipping invalid line: {}", line);
+            // eprintln!("Skipping invalid line: {}", line);
             continue;
         }
 
@@ -203,7 +205,7 @@ fn parse_squeue_output(output: &Output, format: &str) -> Result<Vec<Job>> {
 
             // Match the value to the corresponding format code
             if i >= format_codes.len() {
-                eprintln!("Warning: More parts than format codes for line");
+                // eprintln!("Warning: More parts than format codes for line");
                 break;
             }
 
@@ -213,21 +215,21 @@ fn parse_squeue_output(output: &Output, format: &str) -> Result<Vec<Job>> {
                 "%u" => job.user = value,
                 "%T" => {
                     job.state = JobState::from_str(&value).unwrap_or_else(|_| {
-                        eprintln!("Failed to parse job state: {}", value);
+                        // eprintln!("Failed to parse job state: {}", value);
                         JobState::Other
                     })
                 }
                 "%M" => job.time = value,
                 "%D" => {
                     job.nodes = value.parse::<u32>().unwrap_or_else(|_| {
-                        eprintln!("Failed to parse node count: {}", value);
+                        // eprintln!("Failed to parse node count: {}", value);
                         0
                     })
                 }
                 "%N" => job.node = Some(value),
                 "%C" => {
                     job.cpus = value.parse::<u32>().unwrap_or_else(|_| {
-                        eprintln!("Failed to parse CPU count: {}", value);
+                        // eprintln!("Failed to parse CPU count: {}", value);
                         0
                     })
                 }
@@ -237,7 +239,7 @@ fn parse_squeue_output(output: &Output, format: &str) -> Result<Vec<Job>> {
                 "%a" => job.account = Some(value),
                 "%Q" => {
                     job.priority = value.parse::<u32>().ok().or_else(|| {
-                        eprintln!("Failed to parse priority: {}", value);
+                        // eprintln!("Failed to parse priority: {}", value);
                         None
                     })
                 }
@@ -246,7 +248,7 @@ fn parse_squeue_output(output: &Output, format: &str) -> Result<Vec<Job>> {
                 "%S" => job.start_time = Some(value),
                 "%e" => job.end_time = Some(value),
                 _ => {
-                    eprintln!("Unknown format code: {}", format_codes[i]);
+                    // eprintln!("Unknown format code: {}", format_codes[i]);
                 }
             }
         }
