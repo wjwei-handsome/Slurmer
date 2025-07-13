@@ -3,7 +3,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent
 use ratatui::{
     Frame,
     layout::Rect,
-    style::Style,
+    style::{Color, Style},
     widgets::{Block, Borders, Clear, Paragraph},
 };
 use regex;
@@ -295,7 +295,7 @@ impl App {
 
         // If cancel confirm popup is visible, draw it
         if self.cancel_confirm {
-            let popup_area = centered_popup_area(frame.area(), 80, 60);
+            let popup_area = centered_popup_area(frame.area(), 50, 30);
             self.render_cancel_confirm(frame, popup_area);
         }
     }
@@ -393,13 +393,13 @@ impl App {
                 selected_count
             )
         };
-        let cancel_popup = Paragraph::new(cancel_text)
-            .block(
-                Block::default()
-                    .title("Confirm Cancel")
-                    .borders(Borders::ALL),
-            )
-            .style(Style::default());
+
+        let block = Block::default()
+            .title("Confirm Cancel")
+            .borders(Borders::ALL)
+            .style(Style::default().bg(Color::Black));
+
+        let cancel_popup = Paragraph::new(cancel_text).block(block).centered();
 
         frame.render_widget(cancel_popup, area);
     }
