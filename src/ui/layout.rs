@@ -76,12 +76,13 @@ pub fn draw_footer(frame: &mut Frame, area: Rect, job_stat: (usize, usize, usize
         ("q", "Quit"),
         ("↑/↓", "Navigate"),
         ("Space", "Select"),
-        ("Enter", "View Script"),
+        ("Enter", "Script"),
         ("f", "Filter"),
         ("c", "Columns"),
-        ("v", "View Log"),
+        ("v", "Log"),
         ("a", "SelectAll"),
         ("r", "Refresh"),
+        ("x", "Cancel"),
     ];
 
     let mut footer_text: Vec<Span> = text_hashmap
@@ -91,7 +92,7 @@ pub fn draw_footer(frame: &mut Frame, area: Rect, job_stat: (usize, usize, usize
                 Span::styled(*key, color_style),
                 Span::raw(": "),
                 Span::raw(*description),
-                Span::raw(" | "),
+                Span::raw(" "),
             ]
         })
         .collect();
