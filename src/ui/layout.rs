@@ -71,41 +71,44 @@ pub fn draw_header(
 /// Draws the application footer with help text and status
 pub fn draw_footer(frame: &mut Frame, area: Rect, job_stat: (usize, usize, usize)) {
     // Controls help (lower part of footer)
-    let footer_text = vec![
-        Span::styled("q", Style::default().fg(Color::Cyan)),
-        Span::raw(": Quit | "),
-        Span::styled("↑/↓", Style::default().fg(Color::Cyan)),
-        Span::raw(": Navigate | "),
-        Span::styled("Space", Style::default().fg(Color::Cyan)),
-        Span::raw(": Select | "),
-        Span::styled("Enter", Style::default().fg(Color::Cyan)),
-        Span::raw(": View Script | "),
-        Span::styled("f", Style::default().fg(Color::Cyan)),
-        Span::raw(": Filter | "),
-        Span::styled("c", Style::default().fg(Color::Cyan)),
-        Span::raw(": Columns | "),
-        Span::styled("v", Style::default().fg(Color::Cyan)),
-        Span::raw(": View Log | "),
-        Span::styled("a", Style::default().fg(Color::Cyan)),
-        Span::raw(": SelectAll | "),
-        Span::styled("r", Style::default().fg(Color::Cyan)),
-        Span::raw(": Refresh | "),
-        // stat_text
-        Span::styled("Job Stat: ", Style::default().fg(Color::Cyan)),
-        // Yellow for P, Green for R, Blue for Other
-        Span::styled(
-            format!("P[ {} ] ", job_stat.0),
-            Style::default().fg(Color::Yellow),
-        ),
-        Span::styled(
-            format!("R[ {} ] ", job_stat.1),
-            Style::default().fg(Color::Green),
-        ),
-        Span::styled(
-            format!("Other[ {} ]", job_stat.2),
-            Style::default().fg(Color::Blue),
-        ),
+    let color_style = Style::default().fg(Color::Cyan);
+    let text_hashmap = [
+        ("q", "Quit"),
+        ("↑/↓", "Navigate"),
+        ("Space", "Select"),
+        ("Enter", "View Script"),
+        ("f", "Filter"),
+        ("c", "Columns"),
+        ("v", "View Log"),
+        ("a", "SelectAll"),
+        ("r", "Refresh"),
     ];
+
+    let mut footer_text: Vec<Span> = text_hashmap
+        .iter()
+        .flat_map(|(key, description)| {
+            vec![
+                Span::styled(*key, color_style),
+                Span::raw(": "),
+                Span::raw(*description),
+                Span::raw(" | "),
+            ]
+        })
+        .collect();
+
+    footer_text.push(Span::styled("Job Stat: ", Style::default().fg(Color::Cyan)));
+    footer_text.push(Span::styled(
+        format!("P[ {} ] ", job_stat.0),
+        Style::default().fg(Color::Yellow),
+    ));
+    footer_text.push(Span::styled(
+        format!("R[ {} ] ", job_stat.1),
+        Style::default().fg(Color::Green),
+    ));
+    footer_text.push(Span::styled(
+        format!("Other[ {} ]", job_stat.2),
+        Style::default().fg(Color::Blue),
+    ));
 
     let footer =
         Paragraph::new(Line::from(footer_text)).block(Block::default().borders(Borders::ALL));
