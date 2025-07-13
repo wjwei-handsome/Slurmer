@@ -283,7 +283,6 @@ impl App {
 
         // If columns popup is visible, draw it
         if self.columns_popup.visible {
-            eprintln!("fuckkkkk");
             let popup_area = centered_popup_area(frame.area(), 80, 80);
             self.render_columns_popup(frame, popup_area);
         }
@@ -665,6 +664,7 @@ impl App {
     /// Handle mouse events
     fn handle_mouse_event(&mut self, _mouse: MouseEvent) {
         // TODO: Implement mouse event handling for TUI interactions
+        // seems unnecessary?
     }
 
     /// Handle tick events (called periodically)

@@ -241,7 +241,6 @@ fn create_bat_out_string(path: &str) -> Option<String> {
         .output();
     if let Ok(output) = output {
         if output.status.success() {
-            eprintln!("output:{}", String::from_utf8_lossy(&output.stdout));
             Some(String::from_utf8_lossy(&output.stdout).to_string())
         } else {
             None
