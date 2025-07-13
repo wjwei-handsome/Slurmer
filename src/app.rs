@@ -580,6 +580,24 @@ impl App {
                 }
             }
 
+            // Change job for script view
+            (KeyModifiers::SHIFT, KeyCode::Up) if self.script_view.visible => {
+                // If Shift is pressed, switch to previous job and show its script
+                if self.jobs_list.previous() {
+                    if let Some(job) = self.jobs_list.selected_job() {
+                        self.script_view.change_job(job.id.clone());
+                    }
+                }
+            }
+            (KeyModifiers::SHIFT, KeyCode::Down) if self.script_view.visible => {
+                // If Shift is pressed, switch to next job and show its script
+                if self.jobs_list.next() {
+                    if let Some(job) = self.jobs_list.selected_job() {
+                        self.script_view.change_job(job.id.clone());
+                    }
+                }
+            }
+
             _ if self.script_view.visible => {
                 // If script view is visible, handle script view specific keys
                 self.script_view.handle_key(key);
