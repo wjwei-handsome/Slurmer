@@ -21,19 +21,6 @@ pub fn draw_main_layout(frame: &mut Frame) -> Vec<Rect> {
         ])
         .split(size);
 
-    // Footer will be drawn by the caller
-
-    // Draw the footer (empty status text, will be updated by caller)
-    draw_footer(frame, chunks[2], "");
-
-    // Split the main content area
-    // let main_chunks = Layout::default()
-    //     .direction(Direction::Vertical)
-    //     .constraints([
-    //         Constraint::Percentage(70), // Job list
-    //         Constraint::Percentage(30), // Details or filters
-    //     ])
-    //     .split(chunks[1]);
     let main_chunk = chunks[1];
 
     vec![chunks[0], main_chunk, chunks[2]]
@@ -51,8 +38,8 @@ pub fn draw_header(
     let header_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(30), // Title
-            Constraint::Percentage(70), // Status
+            Constraint::Percentage(20), // Title
+            Constraint::Percentage(80), // Status
         ])
         .split(area);
 
@@ -68,7 +55,7 @@ pub fn draw_header(
 
     // Render the status part
     let status_info = format!(
-        "Status: {} | Refresh: {}s ago (auto: {}s)",
+        "{} | Refresh: {}s ago (auto: {}s)",
         status_text,
         time_since_refresh.as_secs(),
         refresh_interval
@@ -82,16 +69,14 @@ pub fn draw_header(
 }
 
 /// Draws the application footer with help text and status
-pub fn draw_footer(frame: &mut Frame, area: Rect, status_text: &str) {
-    // Render controls directly in the footer area
-    // Controls (lower part of footer)
-    // TODO: use status_text here
+pub fn draw_footer(frame: &mut Frame, area: Rect, job_stat: (usize, usize, usize)) {
+    // Controls help (lower part of footer)
     let footer_text = vec![
         Span::styled("q", Style::default().fg(Color::Cyan)),
         Span::raw(": Quit | "),
         Span::styled("↑/↓", Style::default().fg(Color::Cyan)),
         Span::raw(": Navigate | "),
-        Span::styled("Space |", Style::default().fg(Color::Cyan)),
+        Span::styled("Space", Style::default().fg(Color::Cyan)),
         Span::raw(": Select | "),
         Span::styled("Enter", Style::default().fg(Color::Cyan)),
         Span::raw(": View Script | "),
@@ -104,11 +89,22 @@ pub fn draw_footer(frame: &mut Frame, area: Rect, status_text: &str) {
         Span::styled("a", Style::default().fg(Color::Cyan)),
         Span::raw(": SelectAll | "),
         Span::styled("r", Style::default().fg(Color::Cyan)),
-        Span::raw(": Refresh"),
-        Span::raw(" | "),
-        // status_text
-        Span::styled("Status: ", Style::default().fg(Color::Cyan)),
-        Span::raw(status_text),
+        Span::raw(": Refresh | "),
+        // stat_text
+        Span::styled("Job Stat: ", Style::default().fg(Color::Cyan)),
+        // Yellow for P, Green for R, Blue for Other
+        Span::styled(
+            format!("P[ {} ] ", job_stat.0),
+            Style::default().fg(Color::Yellow),
+        ),
+        Span::styled(
+            format!("R[ {} ] ", job_stat.1),
+            Style::default().fg(Color::Green),
+        ),
+        Span::styled(
+            format!("Other[ {} ]", job_stat.2),
+            Style::default().fg(Color::Blue),
+        ),
     ];
 
     let footer =

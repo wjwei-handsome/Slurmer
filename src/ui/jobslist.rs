@@ -288,11 +288,13 @@ impl JobsList {
             .collect();
 
         // Create the table
+        let job_count = self.jobs.len();
+        let title = format!("{} Jobs", job_count);
         let table = Table::new(rows, constraints)
             .header(header)
-            .block(Block::default().borders(Borders::ALL).title("Jobs"))
+            .block(Block::default().borders(Borders::ALL).title(title))
             .row_highlight_style(Style::default().add_modifier(Modifier::BOLD))
-            .highlight_symbol(" > ");
+            .highlight_symbol(" ▶ ");
 
         // Render the table
         frame.render_stateful_widget(table, area, &mut self.state);

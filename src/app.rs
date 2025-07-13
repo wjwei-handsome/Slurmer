@@ -339,10 +339,27 @@ impl App {
     /// Render the footer with XXX TODO:replace it
     fn render_footer(&self, frame: &mut Frame, area: Rect) {
         // Prepare footer text
-        let footer_text = "";
+        // let footer_text = "";
+        //
+
+        // calculate Pending/Running/Other jobs count percentages
+        let pending_count = self
+            .jobs_list
+            .jobs
+            .iter()
+            .filter(|j| j.state == JobState::Pending)
+            .count();
+        let running_count = self
+            .jobs_list
+            .jobs
+            .iter()
+            .filter(|j| j.state == JobState::Running)
+            .count();
+        let other_count = self.jobs_list.jobs.len() - pending_count - running_count;
+        let job_stat = (pending_count, running_count, other_count);
 
         // Draw the footer
-        draw_footer(frame, area, footer_text);
+        draw_footer(frame, area, job_stat);
     }
 
     /// Render the header with status information
