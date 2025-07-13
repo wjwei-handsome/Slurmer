@@ -436,7 +436,7 @@ impl FilterPopup {
             Style::default().fg(Color::Red)
         };
 
-        let cancel_button = Paragraph::new("Cancel (Esc)")
+        let cancel_button = Paragraph::new("Cancel (Esc/q/Ctrl+C)")
             .style(cancel_style)
             .block(Block::default().borders(Borders::ALL));
 

@@ -386,26 +386,28 @@ impl ColumnsPopup {
         let buttons_layout = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Percentage(33),
-                Constraint::Percentage(33),
-                Constraint::Percentage(34),
+                // Constraint::Percentage(33),
+                // Constraint::Percentage(33),
+                // Constraint::Percentage(34),
+                Constraint::Percentage(50),
+                Constraint::Percentage(50),
             ])
             .split(area);
 
         // Save button
-        let save_style = if self.focus == ColumnsFocus::SaveButton {
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(Color::Yellow)
-        };
+        // let save_style = if self.focus == ColumnsFocus::SaveButton {
+        //     Style::default()
+        //         .fg(Color::Yellow)
+        //         .add_modifier(Modifier::BOLD)
+        // } else {
+        //     Style::default().fg(Color::Yellow)
+        // };
 
-        let save_button = Paragraph::new("Save as Default")
-            .style(save_style)
-            .block(Block::default().borders(Borders::ALL));
+        // let save_button = Paragraph::new("Save as Default")
+        //     .style(save_style)
+        //     .block(Block::default().borders(Borders::ALL));
 
-        frame.render_widget(save_button, buttons_layout[0]);
+        // frame.render_widget(save_button, buttons_layout[0]);
 
         // Apply button
         let apply_style = if self.focus == ColumnsFocus::ApplyButton {
@@ -416,11 +418,11 @@ impl ColumnsPopup {
             Style::default().fg(Color::Green)
         };
 
-        let apply_button = Paragraph::new("Apply")
+        let apply_button = Paragraph::new("Apply (Ctrl+A)")
             .style(apply_style)
             .block(Block::default().borders(Borders::ALL));
 
-        frame.render_widget(apply_button, buttons_layout[1]);
+        frame.render_widget(apply_button, buttons_layout[0]);
 
         // Cancel button
         let cancel_style = if self.focus == ColumnsFocus::CancelButton {
@@ -429,11 +431,11 @@ impl ColumnsPopup {
             Style::default().fg(Color::Red)
         };
 
-        let cancel_button = Paragraph::new("Cancel")
+        let cancel_button = Paragraph::new("Cancel (Esc/q/Ctrl+C)")
             .style(cancel_style)
             .block(Block::default().borders(Borders::ALL));
 
-        frame.render_widget(cancel_button, buttons_layout[2]);
+        frame.render_widget(cancel_button, buttons_layout[1]);
     }
 
     /// Handle key events
@@ -486,10 +488,10 @@ impl ColumnsPopup {
             }
 
             // F10 or Ctrl+S to save settings
-            KeyCode::F(10) => return ColumnsAction::SaveAndApply,
-            KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                return ColumnsAction::SaveAndApply;
-            }
+            // KeyCode::F(10) => return ColumnsAction::SaveAndApply,
+            // KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            //     return ColumnsAction::SaveAndApply;
+            // }
             _ => {}
         }
 
