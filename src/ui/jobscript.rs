@@ -235,7 +235,8 @@ fn create_bat_out_string(path: &str) -> Option<String> {
     let output = Command::new("bat")
         .arg("--style=numbers,grid")
         .arg("--color=always")
-        .arg("--theme=GitHub")
+        .arg("--theme")
+        .arg("Solarized (light)")
         .arg("--terminal-width=100")
         .arg(path)
         .output();
