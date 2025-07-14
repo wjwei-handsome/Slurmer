@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "slurm TUI"
 authors = ["wjwei-handsome <weiwenjie@westlake.edu.cn>"]
 license = "MIT"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
 crossterm = "0.28.1"
