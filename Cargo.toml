@@ -1,10 +1,13 @@
 [package]
 name = "slurmer"
 version = "0.1.0"
-description = "slurm TUI"
+description = "A TUI application for monitoring and managing SLURM jobs."
 authors = ["wjwei-handsome <weiwenjie@westlake.edu.cn>"]
 license = "MIT"
 edition = "2021"
+repository = "https://github.com/wjwei-handsome/Slurmer"
+readme = "README.md"
+exclude = ["images/",]
 
 [dependencies]
 crossterm = "0.28.1"
@@ -12,6 +15,6 @@ ratatui = "0.29.0"
 crossbeam = "0.8.2"
 notify = "6.1.1"
 color-eyre = "0.6.3"
-tokio = { version = "1.36.0", features = ["full"] }
+tokio = { version = "1.36.0", features = ["rt-multi-thread"] }
 async-process = "2.1.0"
 regex = "1.10.2"
