@@ -1,6 +1,6 @@
 [package]
 name = "slurmer"
-version = "0.1.0"
+version = "0.1.1"
 description = "A TUI application for monitoring and managing SLURM jobs."
 authors = ["wjwei-handsome <weiwenjie@westlake.edu.cn>"]
 license = "MIT"
