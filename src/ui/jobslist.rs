@@ -1,8 +1,8 @@
 use ratatui::{
-    Frame,
     layout::{Constraint, Rect},
     style::{Color, Modifier, Style},
     widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState},
+    Frame,
 };
 
 use crate::slurm::{Job, JobState};

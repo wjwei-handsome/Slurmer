@@ -1,11 +1,11 @@
 use color_eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent};
 use ratatui::{
-    Frame,
     layout::Rect,
     style::{Color, Style},
     text::Line,
     widgets::{Block, Borders, Clear, Paragraph},
+    Frame,
 };
 use regex;
 use std::time::{Duration, Instant};
@@ -13,9 +13,9 @@ use tokio::runtime::Runtime;
 
 use crate::{
     slurm::{
-        JobState,
         command::{execute_scancel, get_partitions, get_qos},
-        squeue::{SqueueOptions, run_squeue},
+        squeue::{run_squeue, SqueueOptions},
+        JobState,
     },
     ui::{
         columns::{ColumnsAction, ColumnsPopup, JobColumn, SortColumn, SortOrder},

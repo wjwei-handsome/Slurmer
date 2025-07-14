@@ -8,10 +8,10 @@ use std::{
 };
 
 use crossbeam::{
-    channel::{Receiver, RecvError, SendError, Sender, unbounded},
+    channel::{unbounded, Receiver, RecvError, SendError, Sender},
     select,
 };
-use notify::{RecursiveMode, Watcher, event::ModifyKind};
+use notify::{event::ModifyKind, RecursiveMode, Watcher};
 
 type JobOutput = Result<String, FileWatcherError>;
 

@@ -1,14 +1,14 @@
 use crossterm::event::KeyModifiers;
 use ratatui::{
-    Frame,
     layout::{Constraint, Direction, Layout, Position, Rect},
     style::{Color, Modifier, Style},
     text::Line,
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
+    Frame,
 };
 use regex::Regex;
 
-use crate::slurm::{JobState, squeue::SqueueOptions};
+use crate::slurm::{squeue::SqueueOptions, JobState};
 
 /// Filter popup state
 pub struct FilterPopup {

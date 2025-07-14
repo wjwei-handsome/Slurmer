@@ -1,6 +1,6 @@
 use async_process::{Command, Output};
-use color_eyre::Result;
 use color_eyre::eyre::Error;
+use color_eyre::Result;
 use std::collections::HashMap;
 use std::str::FromStr;
 
