@@ -29,8 +29,15 @@ It provides an intuitive, interactive interface to view, filter, sort, and manag
 ## 🛠️ Installation
 
 ```bash
+cargo install slurmer
+```
+or install from the latest source code:
+
+```bash
 cargo install --git https://github.com/wjwei-handsome/Slurmer.git
 ```
+
+
 ## 📖 Usage
 
 Just run `slurmer`.
@@ -53,8 +60,8 @@ More detailed keybindings can be found each popup menu.
 
 ## 🔗 Dependencies
 
-- slurm utilities (e.g., `squeue`, `scancel`) is required
-- bat (optional, for viewing job scripts)
+- slurm utilities (e.g., `squeue`, `scancel`) is required.
+- [`bat`](https://github.com/sharkdp/bat) is optional for viewing job scripts.
 
 ## ⚙️ Configuration
 
