@@ -111,7 +111,7 @@ impl JobScript {
         let title = format!("Job Script for {}/{}", job_name, job_id);
 
         let help_text =
-            " [↑/↓] Scroll | [Ctrl+u/d] PageUp/Down | [Ctrl+↑/↓] Toggle Job| [q] Close ";
+            " [↑/↓] Scroll | [Ctrl+u/d] PageUp/Down | [Shift+↑/↓] Toggle Job| [q] Close ";
 
         // Create text with line numbers if enabled
         let text = self.create_display_text();

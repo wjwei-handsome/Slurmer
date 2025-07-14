@@ -242,7 +242,7 @@ impl LogView {
         };
 
         let help_text =
-            " [↑/↓] Scroll | [Ctrl+↑/↓] Toggle Job | [o] Toggle stdout/stderr | [q] Close ";
+            " [↑/↓] Scroll | [Shift+↑/↓] Toggle Job | [o] Toggle stdout/stderr | [q] Close ";
 
         let log_text = match (self.file_status, self.content.is_empty()) {
             (LogFileStatus::NotFound, _) => format!(
