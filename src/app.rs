@@ -428,9 +428,7 @@ impl App {
     fn handle_key_event(&mut self, key: KeyEvent) {
         match (key.modifiers, key.code) {
             // Quit application
-            (_, KeyCode::Char('q'))
-            | (_, KeyCode::Esc)
-            | (KeyModifiers::CONTROL, KeyCode::Char('c')) => {
+            (_, KeyCode::Esc) | (KeyModifiers::CONTROL, KeyCode::Char('c')) => {
                 if self.filter_popup.visible
                     || self.script_view.visible
                     || self.columns_popup.visible
@@ -531,6 +529,30 @@ impl App {
                 self.columns_popup =
                     ColumnsPopup::new(self.selected_columns.clone(), self.sort_columns.clone());
                 self.columns_popup.visible = true;
+            }
+
+            // Handle filter popup key events
+            _ if self.filter_popup.visible => {
+                let action = self.filter_popup.handle_key(
+                    key,
+                    &mut self.squeue_options,
+                    &self.available_states,
+                    &self.available_partitions,
+                    &self.available_qos,
+                );
+
+                match action {
+                    FilterAction::Close => {
+                        self.filter_popup.visible = false;
+                    }
+                    FilterAction::Apply => {
+                        self.filter_popup.visible = false;
+                        if let Err(e) = self.apply_filters() {
+                            self.set_status_message(format!("Failed to apply filters: {}", e), 3);
+                        }
+                    }
+                    FilterAction::None => {}
+                }
             }
 
             // Handle filter popup key events

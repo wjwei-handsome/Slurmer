@@ -73,7 +73,7 @@ pub fn draw_footer(frame: &mut Frame, area: Rect, job_stat: (usize, usize, usize
     // Controls help (lower part of footer)
     let color_style = Style::default().fg(Color::Cyan);
     let text_hashmap = [
-        ("q", "Quit"),
+        ("Esc", "Quit"),
         ("↑/↓", "Navigate"),
         ("Space", "Select"),
         ("Enter", "Script"),
