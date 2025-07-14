@@ -241,7 +241,8 @@ impl LogView {
             None => format!("Log View - {}", self.current_tab.as_str()),
         };
 
-        let help_text = " [↑/↓] Scroll | [o] Toggle stdout/stderr | [q] Close ";
+        let help_text =
+            " [↑/↓] Scroll | [Ctrl+↑/↓] Toggle Job | [o] Toggle stdout/stderr | [q] Close ";
 
         let log_text = match (self.file_status, self.content.is_empty()) {
             (LogFileStatus::NotFound, _) => format!(

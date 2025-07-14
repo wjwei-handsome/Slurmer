@@ -3,6 +3,7 @@ use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
+    text::Line,
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
 };
 
@@ -247,8 +248,8 @@ impl ColumnsPopup {
         frame.render_widget(Clear, area);
         // Create a block for the popup
         let block = Block::default()
-            .title("Column Management")
-            .borders(Borders::ALL)
+            .title(Line::from("Column Management").centered())
+            .borders(Borders::NONE)
             .style(Style::default().bg(Color::Black));
 
         frame.render_widget(block.clone(), area);
@@ -259,15 +260,15 @@ impl ColumnsPopup {
             .margin(1)
             .constraints([
                 Constraint::Min(5),    // Content
-                Constraint::Length(3), // Buttons
+                Constraint::Length(3), // Help text
             ])
             .split(area);
 
         // Render the unified three-column view
         self.render_unified_columns_view(frame, inner_area[0]);
 
-        // Render buttons
-        self.render_buttons(frame, inner_area[1]);
+        // Render help text
+        self.render_help_text(frame, inner_area[1]);
     }
 
     /// Render the columns tab (available and selected columns)
@@ -357,85 +358,29 @@ impl ColumnsPopup {
             .highlight_style(Style::default().add_modifier(Modifier::BOLD));
 
         frame.render_stateful_widget(sort_list, columns[2], &mut self.sort_columns_state);
+    }
 
-        // Show help text
-        let help_area = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Min(1), Constraint::Length(2)])
-            .split(area)[1];
-
-        let help_text = match self.focus {
+    fn render_help_text(&self, frame: &mut Frame, area: Rect) {
+        let base_help_text = match self.focus {
             ColumnsFocus::AvailableColumns => {
-                "↑/↓: Navigate | →: Switch to Selected | Enter: Add column to Selected"
+                "↑/↓: Navigate | ←/→: Switch lists | Enter: Add to Selected"
             }
             ColumnsFocus::SelectedColumns => {
                 "↑/↓: Navigate | ←/→: Switch lists | Enter: Add to Sort | Del: Remove | Ctrl+↑/↓: Move up/down"
             }
             ColumnsFocus::SortColumns => {
-                "↑/↓: Navigate | ←: Switch to Selected | Enter/Space: Toggle order | Del: Remove | Ctrl+↑/↓: Move up/down"
+                "↑/↓: Navigate | ←/→: Switch lists | Enter: Toggle order | Del: Remove | Ctrl+↑/↓: Move up/down"
             }
             _ => "",
         };
-        let help = Paragraph::new(help_text).style(Style::default().fg(Color::Gray));
 
-        frame.render_widget(help, help_area);
-    }
+        let full_help_text = format!("{} | Ctrl+a: Apply | Esc: Close", base_help_text);
 
-    /// Render the buttons
-    fn render_buttons(&self, frame: &mut Frame, area: Rect) {
-        let buttons_layout = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                // Constraint::Percentage(33),
-                // Constraint::Percentage(33),
-                // Constraint::Percentage(34),
-                Constraint::Percentage(50),
-                Constraint::Percentage(50),
-            ])
-            .split(area);
-
-        // Save button
-        // let save_style = if self.focus == ColumnsFocus::SaveButton {
-        //     Style::default()
-        //         .fg(Color::Yellow)
-        //         .add_modifier(Modifier::BOLD)
-        // } else {
-        //     Style::default().fg(Color::Yellow)
-        // };
-
-        // let save_button = Paragraph::new("Save as Default")
-        //     .style(save_style)
-        //     .block(Block::default().borders(Borders::ALL));
-
-        // frame.render_widget(save_button, buttons_layout[0]);
-
-        // Apply button
-        let apply_style = if self.focus == ColumnsFocus::ApplyButton {
-            Style::default()
-                .fg(Color::Green)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(Color::Green)
-        };
-
-        let apply_button = Paragraph::new("Apply (Ctrl+A)")
-            .style(apply_style)
+        let help = Paragraph::new(full_help_text)
+            .style(Style::default().fg(Color::Gray))
             .block(Block::default().borders(Borders::ALL));
 
-        frame.render_widget(apply_button, buttons_layout[0]);
-
-        // Cancel button
-        let cancel_style = if self.focus == ColumnsFocus::CancelButton {
-            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(Color::Red)
-        };
-
-        let cancel_button = Paragraph::new("Cancel (Esc/q/Ctrl+C)")
-            .style(cancel_style)
-            .block(Block::default().borders(Borders::ALL));
-
-        frame.render_widget(cancel_button, buttons_layout[1]);
+        frame.render_widget(help, area);
     }
 
     /// Handle key events

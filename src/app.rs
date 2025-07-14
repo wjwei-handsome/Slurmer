@@ -4,6 +4,7 @@ use ratatui::{
     Frame,
     layout::Rect,
     style::{Color, Style},
+    text::Line,
     widgets::{Block, Borders, Clear, Paragraph},
 };
 use regex;
@@ -130,16 +131,6 @@ impl App {
     ) -> Result<()> {
         // Initial job loading
         self.refresh_jobs()?;
-
-        // Initialize filter popup with current options
-        // self.filter_popup.initialize(&self.squeue_options);
-
-        // Update squeue format string based on selected columns
-        // self.update_squeue_format();
-
-        // Ensure the column popup has the correct initial state
-        // self.columns_popup =
-        //     ColumnsPopup::new(self.selected_columns.clone(), self.sort_columns.clone());
 
         while self.running {
             terminal.draw(|frame| self.render(frame))?;
@@ -338,10 +329,6 @@ impl App {
 
     /// Render the footer with XXX TODO:replace it
     fn render_footer(&self, frame: &mut Frame, area: Rect) {
-        // Prepare footer text
-        // let footer_text = "";
-        //
-
         // calculate Pending/Running/Other jobs count percentages
         let pending_count = self
             .jobs_list
@@ -412,11 +399,14 @@ impl App {
         };
 
         let block = Block::default()
-            .title("Confirm Cancel")
-            .borders(Borders::ALL)
+            .title(Line::from("Confirm Cancel").centered())
+            .borders(Borders::NONE)
             .style(Style::default().bg(Color::Black));
 
-        let cancel_popup = Paragraph::new(cancel_text).block(block).centered();
+        let cancel_popup = Paragraph::new(cancel_text)
+            .style(Style::default().fg(Color::Cyan))
+            .block(block)
+            .centered();
 
         frame.render_widget(cancel_popup, area);
     }
@@ -576,7 +566,7 @@ impl App {
             {
                 if let Some(job) = self.jobs_list.selected_job() {
                     // Show job script in detail view
-                    self.script_view.show(job.id.clone());
+                    self.script_view.show(job.id.clone(), job.name.clone());
                 }
             }
 
@@ -585,7 +575,8 @@ impl App {
                 // If Shift is pressed, switch to previous job and show its script
                 if self.jobs_list.previous() {
                     if let Some(job) = self.jobs_list.selected_job() {
-                        self.script_view.change_job(job.id.clone());
+                        self.script_view
+                            .change_job(job.id.clone(), job.name.clone());
                     }
                 }
             }
@@ -593,7 +584,8 @@ impl App {
                 // If Shift is pressed, switch to next job and show its script
                 if self.jobs_list.next() {
                     if let Some(job) = self.jobs_list.selected_job() {
-                        self.script_view.change_job(job.id.clone());
+                        self.script_view
+                            .change_job(job.id.clone(), job.name.clone());
                     }
                 }
             }

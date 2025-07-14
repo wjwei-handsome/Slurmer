@@ -37,7 +37,7 @@ fn main() -> Result<()> {
 
     // Handle any errors that occurred during execution
     if let Err(err) = result {
-        println!("{:?}", err);
+        eprintln!("{:?}", err);
         return Err(err);
     }
 

@@ -4,7 +4,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Position, Rect},
     style::{Color, Modifier, Style},
     text::Line,
-    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs},
+    widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
 };
 use regex::Regex;
 
@@ -47,8 +47,6 @@ pub enum FilterFocus {
     QoS,
     NameFilter,
     NodeFilter,
-    ApplyButton,
-    CancelButton,
 }
 
 impl FilterPopup {
@@ -139,8 +137,8 @@ impl FilterPopup {
         frame.render_widget(Clear, area);
         // Create a block for the popup
         let block = Block::default()
-            .title("Filter Jobs")
-            .borders(Borders::ALL)
+            .title(Line::from("Filter Jobs").centered())
+            .borders(Borders::NONE)
             .style(Style::default().bg(Color::Black));
 
         // Render the popup block
@@ -151,49 +149,48 @@ impl FilterPopup {
             .direction(Direction::Vertical)
             .margin(1)
             .constraints([
-                Constraint::Length(3), // Tabs
-                Constraint::Min(5),    // Content area
-                Constraint::Length(3), // Buttons
+                Constraint::Length(8), // User & Name & Node section (top)
+                Constraint::Min(5),    // Other filters section (bottom)
+                Constraint::Length(3), // Help Text
             ])
             .split(area);
 
-        // Create the tabs
-        let tabs = Tabs::new(vec![
-            Line::from("User & Name & Node"),
-            Line::from("States"),
-            Line::from("Partitions"),
-            Line::from("QoS"),
-        ])
-        .block(Block::default().borders(Borders::BOTTOM))
-        .select(self.tab_index)
-        .highlight_style(Style::default().fg(Color::Yellow));
+        // Render the user tab on top
+        self.render_user_tab(frame, inner_area[0]);
 
-        frame.render_widget(tabs, inner_area[0]);
+        // Create horizontal layout for the bottom three sections
+        let bottom_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Ratio(1, 3), // States
+                Constraint::Ratio(1, 3), // Partitions
+                Constraint::Ratio(1, 3), // QoS
+            ])
+            .split(inner_area[1]);
 
-        // Render the appropriate tab content
-        match self.tab_index {
-            0 => self.render_user_tab(frame, inner_area[1]),
-            1 => self.render_states_tab(frame, inner_area[1], options, all_states),
-            2 => self.render_partitions_tab(frame, inner_area[1], options, all_partitions),
-            3 => self.render_qos_tab(frame, inner_area[1], options, all_qos),
-            _ => {}
-        }
+        // Render bottom three sections
+        self.render_states_tab(frame, bottom_chunks[0], options, all_states);
+        self.render_partitions_tab(frame, bottom_chunks[1], options, all_partitions);
+        self.render_qos_tab(frame, bottom_chunks[2], options, all_qos);
 
-        // Render the buttons
-        self.render_buttons(frame, inner_area[2]);
+        // Render help text at the bottom
+        let help_text = "↑/↓: Navigate | ←/→: Switch Filters | Enter: Select/Input | Ctrl+a: Apply | Esc: Close";
+        let help = Paragraph::new(help_text)
+            .style(Style::default().fg(Color::Gray))
+            .block(Block::default().borders(Borders::ALL));
+
+        frame.render_widget(help, inner_area[2]);
     }
 
     /// Render the user and name filter tab
     fn render_user_tab(&self, frame: &mut Frame, area: Rect) {
         let chunks = Layout::default()
-            .direction(Direction::Vertical)
+            .direction(Direction::Horizontal)
             .margin(1)
             .constraints([
-                Constraint::Length(3), // Username
-                Constraint::Length(1), // Spacer
-                Constraint::Length(3), // Job name filter
-                Constraint::Length(1), // Spacer
-                Constraint::Length(3), // Node filter
+                Constraint::Ratio(1, 3), // Username
+                Constraint::Ratio(1, 3), // Job name filter
+                Constraint::Ratio(1, 3), // Node filter
             ])
             .split(area);
 
@@ -235,7 +232,7 @@ impl FilterPopup {
 
         let name_filter_text = Paragraph::new(self.name_filter.clone()).block(name_filter_block);
 
-        frame.render_widget(name_filter_text, chunks[2]);
+        frame.render_widget(name_filter_text, chunks[1]);
 
         // Node filter field
         // Show validation status in the title for node filter
@@ -261,7 +258,7 @@ impl FilterPopup {
 
         let node_filter_text = Paragraph::new(self.node_filter.clone()).block(node_filter_block);
 
-        frame.render_widget(node_filter_text, chunks[4]);
+        frame.render_widget(node_filter_text, chunks[2]);
 
         // Show cursor when in input mode
         if self.input_mode {
@@ -271,12 +268,12 @@ impl FilterPopup {
                     chunks[0].y + 1,
                 ),
                 FilterFocus::NameFilter => (
-                    chunks[2].x + 1 + self.name_filter.len() as u16,
-                    chunks[2].y + 1,
+                    chunks[1].x + 1 + self.name_filter.len() as u16,
+                    chunks[1].y + 1,
                 ),
                 FilterFocus::NodeFilter => (
-                    chunks[4].x + 1 + self.node_filter.len() as u16,
-                    chunks[4].y + 1,
+                    chunks[2].x + 1 + self.node_filter.len() as u16,
+                    chunks[2].y + 1,
                 ),
                 _ => (0, 0),
             };
@@ -407,42 +404,6 @@ impl FilterPopup {
         frame.render_stateful_widget(qos_list, area, &mut self.qos_list_state);
     }
 
-    /// Render the apply and cancel buttons
-    fn render_buttons(&self, frame: &mut Frame, area: Rect) {
-        let button_chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-            .split(area);
-
-        // Apply button
-        let apply_style = if self.focus == FilterFocus::ApplyButton {
-            Style::default()
-                .fg(Color::Green)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(Color::Green)
-        };
-
-        let apply_button = Paragraph::new("Apply (F10 or Ctrl+A)")
-            .style(apply_style)
-            .block(Block::default().borders(Borders::ALL));
-
-        frame.render_widget(apply_button, button_chunks[0]);
-
-        // Cancel button
-        let cancel_style = if self.focus == FilterFocus::CancelButton {
-            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().fg(Color::Red)
-        };
-
-        let cancel_button = Paragraph::new("Cancel (Esc/q/Ctrl+C)")
-            .style(cancel_style)
-            .block(Block::default().borders(Borders::ALL));
-
-        frame.render_widget(cancel_button, button_chunks[1]);
-    }
-
     /// Handle key events for the filter popup
     pub fn handle_key(
         &mut self,
@@ -461,9 +422,6 @@ impl FilterPopup {
                 if self.input_mode {
                     // Exit input mode on Tab
                     self.input_mode = false;
-                } else {
-                    // Cycle through focusable elements
-                    self.cycle_focus();
                 }
                 return FilterAction::None;
             }
@@ -530,42 +488,6 @@ impl FilterPopup {
                         }
                         FilterAction::None
                     }
-                    FilterFocus::ApplyButton => {
-                        // Check if both regexes are valid (or empty)
-                        let name_valid =
-                            self.name_filter.is_empty() || self.name_regex_valid == Some(true);
-                        let node_valid =
-                            self.node_filter.is_empty() || self.node_regex_valid == Some(true);
-
-                        if !name_valid || !node_valid {
-                            // At least one regex is invalid - don't apply filters
-                            return FilterAction::None;
-                        }
-
-                        // Apply user filter
-                        if !self.username.is_empty() {
-                            options.user = Some(self.username.clone());
-                        } else {
-                            options.user = None;
-                        }
-
-                        // Apply name filter if valid
-                        if !self.name_filter.is_empty() {
-                            options.name_filter = Some(self.name_filter.clone());
-                        } else {
-                            options.name_filter = None;
-                        }
-
-                        // Apply node filter if valid
-                        if !self.node_filter.is_empty() {
-                            options.node_filter = Some(self.node_filter.clone());
-                        } else {
-                            options.node_filter = None;
-                        }
-
-                        FilterAction::Apply
-                    }
-                    FilterFocus::CancelButton => FilterAction::Close,
                 }
             }
             KeyCode::Up => {
@@ -599,22 +521,7 @@ impl FilterPopup {
                             self.qos_list_state.select(Some(all_qos.len() - 1));
                         }
                     }
-                    FilterFocus::NodeFilter => {
-                        // Move focus to the name filter if up is pressed in the node filter
-                        self.focus = FilterFocus::NameFilter;
-                    }
-                    FilterFocus::NameFilter => {
-                        // Move focus to the username if up is pressed in the name filter
-                        self.focus = FilterFocus::Username;
-                    }
-                    FilterFocus::ApplyButton | FilterFocus::CancelButton => {
-                        // Move focus to node filter from buttons
-                        self.focus = FilterFocus::NodeFilter;
-                    }
-                    FilterFocus::Username => {
-                        // If already at the top, move to the last focusable element
-                        self.focus = FilterFocus::NodeFilter;
-                    }
+                    _ => {}
                 }
                 FilterAction::None
             }
@@ -648,15 +555,6 @@ impl FilterPopup {
                             self.qos_list_state.select(Some(0));
                         }
                     }
-                    FilterFocus::Username => {
-                        self.focus = FilterFocus::NameFilter;
-                    }
-                    FilterFocus::NameFilter => {
-                        self.focus = FilterFocus::NodeFilter;
-                    }
-                    FilterFocus::NodeFilter => {
-                        self.focus = FilterFocus::Username;
-                    }
                     _ => {}
                 }
                 FilterAction::None
@@ -668,7 +566,7 @@ impl FilterPopup {
                     self.update_focus_for_tab();
                     return FilterAction::None;
                 } else if self.tab_index == 0 {
-                    self.tab_index = 3; // Wrap around to last tab
+                    self.tab_index = 5; // Wrap around to last tab
                     self.update_focus_for_tab();
                     return FilterAction::None;
                 } else {
@@ -677,11 +575,11 @@ impl FilterPopup {
             }
             KeyCode::Right => {
                 // Change tab
-                if self.tab_index < 3 {
+                if self.tab_index < 5 {
                     self.tab_index += 1;
                     self.update_focus_for_tab();
                     return FilterAction::None;
-                } else if self.tab_index == 3 {
+                } else if self.tab_index == 5 {
                     self.tab_index = 0; // Wrap around to first tab
                     self.update_focus_for_tab();
                     return FilterAction::None;
@@ -773,140 +671,19 @@ impl FilterPopup {
                 }
                 FilterAction::None
             }
-            KeyCode::Up => {
-                //quit input mode and cycle focus up
-                self.input_mode = false;
-                // Cycle focus up
-                match self.focus {
-                    FilterFocus::Username => self.focus = FilterFocus::NodeFilter,
-                    FilterFocus::NameFilter => self.focus = FilterFocus::Username,
-                    FilterFocus::NodeFilter => self.focus = FilterFocus::NameFilter,
-                    _ => {}
-                }
-                FilterAction::None
-            }
-            KeyCode::Down => {
-                //quit input mode and cycle focus down
-                self.input_mode = false;
-                // Cycle focus down
-                match self.focus {
-                    FilterFocus::Username => self.focus = FilterFocus::NameFilter,
-                    FilterFocus::NameFilter => self.focus = FilterFocus::NodeFilter,
-                    FilterFocus::NodeFilter => self.focus = FilterFocus::Username,
-                    _ => {}
-                }
-                FilterAction::None
-            }
             _ => FilterAction::None,
-        }
-    }
-
-    /// Cycle focus between the focusable elements in the current tab
-    fn cycle_focus(&mut self) {
-        match self.tab_index {
-            0 => {
-                // User tab
-                match self.focus {
-                    FilterFocus::Username => self.focus = FilterFocus::NameFilter,
-                    FilterFocus::NameFilter => self.focus = FilterFocus::NodeFilter,
-                    FilterFocus::NodeFilter => self.focus = FilterFocus::ApplyButton,
-                    FilterFocus::ApplyButton => self.focus = FilterFocus::CancelButton,
-                    FilterFocus::CancelButton => self.focus = FilterFocus::Username,
-                    _ => self.focus = FilterFocus::Username,
-                }
-            }
-            1 => {
-                // States tab
-                match self.focus {
-                    FilterFocus::States => self.focus = FilterFocus::ApplyButton,
-                    FilterFocus::ApplyButton => self.focus = FilterFocus::CancelButton,
-                    FilterFocus::CancelButton => self.focus = FilterFocus::States,
-                    _ => self.focus = FilterFocus::States,
-                }
-            }
-            2 => {
-                // Partitions tab
-                match self.focus {
-                    FilterFocus::Partitions => self.focus = FilterFocus::ApplyButton,
-                    FilterFocus::ApplyButton => self.focus = FilterFocus::CancelButton,
-                    FilterFocus::CancelButton => self.focus = FilterFocus::Partitions,
-                    _ => self.focus = FilterFocus::Partitions,
-                }
-            }
-            3 => {
-                // QoS tab
-                match self.focus {
-                    FilterFocus::QoS => self.focus = FilterFocus::ApplyButton,
-                    FilterFocus::ApplyButton => self.focus = FilterFocus::CancelButton,
-                    FilterFocus::CancelButton => self.focus = FilterFocus::QoS,
-                    _ => self.focus = FilterFocus::QoS,
-                }
-            }
-            _ => {}
         }
     }
 
     /// Update focus when tab changes
     fn update_focus_for_tab(&mut self) {
         match self.tab_index {
-            0 => {
-                // User tab
-                match self.focus {
-                    FilterFocus::States
-                    | FilterFocus::Partitions
-                    | FilterFocus::QoS
-                    | FilterFocus::ApplyButton
-                    | FilterFocus::CancelButton => {
-                        self.focus = FilterFocus::Username;
-                    }
-                    _ => {}
-                }
-            }
-            1 => {
-                // States tab
-                match self.focus {
-                    FilterFocus::Username
-                    | FilterFocus::NameFilter
-                    | FilterFocus::NodeFilter
-                    | FilterFocus::Partitions
-                    | FilterFocus::QoS
-                    | FilterFocus::ApplyButton
-                    | FilterFocus::CancelButton => {
-                        self.focus = FilterFocus::States;
-                    }
-                    _ => {}
-                }
-            }
-            2 => {
-                // Partitions tab
-                match self.focus {
-                    FilterFocus::Username
-                    | FilterFocus::NameFilter
-                    | FilterFocus::NodeFilter
-                    | FilterFocus::States
-                    | FilterFocus::QoS
-                    | FilterFocus::ApplyButton
-                    | FilterFocus::CancelButton => {
-                        self.focus = FilterFocus::Partitions;
-                    }
-                    _ => {}
-                }
-            }
-            3 => {
-                // QoS tab
-                match self.focus {
-                    FilterFocus::Username
-                    | FilterFocus::NameFilter
-                    | FilterFocus::NodeFilter
-                    | FilterFocus::States
-                    | FilterFocus::Partitions
-                    | FilterFocus::ApplyButton
-                    | FilterFocus::CancelButton => {
-                        self.focus = FilterFocus::QoS;
-                    }
-                    _ => {}
-                }
-            }
+            0 => self.focus = FilterFocus::Username,
+            1 => self.focus = FilterFocus::NameFilter,
+            2 => self.focus = FilterFocus::NodeFilter,
+            3 => self.focus = FilterFocus::States,
+            4 => self.focus = FilterFocus::Partitions,
+            5 => self.focus = FilterFocus::QoS,
             _ => {}
         }
     }

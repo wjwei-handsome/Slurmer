@@ -12,6 +12,7 @@ use std::{collections::HashMap, process::Command};
 pub struct JobScript {
     pub visible: bool,
     pub job_id: Option<String>,
+    pub job_name: Option<String>,
     pub content: String,
     pub scroll_position: usize,
     pub script_path: Option<String>,
@@ -24,6 +25,7 @@ impl JobScript {
         Self {
             visible: false,
             job_id: None,
+            job_name: None,
             content: String::new(),
             scroll_position: 0,
             script_path: None,
@@ -32,8 +34,8 @@ impl JobScript {
     }
 
     /// Show the job script view for a specific job
-    pub fn show(&mut self, job_id: String) {
-        self.change_job(job_id);
+    pub fn show(&mut self, job_id: String, job_name: String) {
+        self.change_job(job_id, job_name);
         self.visible = true;
     }
 
@@ -43,8 +45,9 @@ impl JobScript {
     }
 
     /// Change the job being viewed
-    pub fn change_job(&mut self, job_id: String) {
+    pub fn change_job(&mut self, job_id: String, job_name: String) {
         self.job_id = Some(job_id);
+        self.job_name = Some(job_name);
         self.script_path = None;
         self.scroll_position = 0;
 
@@ -96,12 +99,19 @@ impl JobScript {
 
         frame.render_widget(Clear, area);
 
-        let title = match &self.job_id {
-            Some(id) => format!("Job Script: {}", id),
-            None => String::from("Job Script"),
+        let job_id = match &self.job_id {
+            Some(id) => id.clone(),
+            None => String::from("null"),
+        };
+        let job_name = match &self.job_name {
+            Some(name) => name.clone(),
+            None => String::from("null"),
         };
 
-        let help_text = " [↑/↓] Scroll | [Ctrl+u/d] PageUp/Down | [q] Close ";
+        let title = format!("Job Script for {}/{}", job_name, job_id);
+
+        let help_text =
+            " [↑/↓] Scroll | [Ctrl+u/d] PageUp/Down | [Ctrl+↑/↓] Toggle Job| [q] Close ";
 
         // Create text with line numbers if enabled
         let text = self.create_display_text();
