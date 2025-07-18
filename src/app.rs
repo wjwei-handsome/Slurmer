@@ -95,7 +95,7 @@ impl App {
         let available_states = JobState::get_available_states();
 
         // Default columns and sort options
-        let selected_columns = JobColumn::defaults();
+        let selected_columns = JobColumn::from_env_or_defaults();
         let sort_columns = vec![SortColumn {
             column: JobColumn::Id,
             order: SortOrder::Ascending,

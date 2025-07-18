@@ -6,6 +6,8 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
     Frame,
 };
+use std::env;
+
 
 /// Available columns for display in job list
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -144,6 +146,61 @@ impl JobColumn {
             JobColumn::QoS,
         ]
     }
+
+    // Parse a string to a column value
+    fn from_str(s: &str) -> Option<JobColumn> {
+        match s.to_lowercase().as_str() {
+            "id" => Some(JobColumn::Id),
+            "name" => Some(JobColumn::Name),
+            "user" => Some(JobColumn::User),
+            "state" => Some(JobColumn::State),
+            "partition" => Some(JobColumn::Partition),
+            "qos" => Some(JobColumn::QoS),
+            "nodes" => Some(JobColumn::Nodes),
+            "node" => Some(JobColumn::Node),
+            "cpus" => Some(JobColumn::CPUs),
+            "time" => Some(JobColumn::Time),
+            "memory" => Some(JobColumn::Memory),
+            "account" => Some(JobColumn::Account),
+            "priority" => Some(JobColumn::Priority),
+            "workdir" => Some(JobColumn::WorkDir),
+            "submittime" => Some(JobColumn::SubmitTime),
+            "starttime" => Some(JobColumn::StartTime),
+            "endtime" => Some(JobColumn::EndTime),
+            "preason" => Some(JobColumn::PReason),
+            _ => None,
+        }
+    }
+
+    // Load columns from ENV or use default
+    pub fn from_env_or_defaults() -> Vec<JobColumn> {
+        match env::var("SLURMER_COLUMNS") {
+            Ok(env_value) => {
+                let mut columns = Vec::new();
+                // ID is always default
+                columns.push(JobColumn::Id);
+
+                for name in env_value.split(","){
+                    let trimmed = name.trim();
+                    if let Some(column) = Self::from_str(trimmed){
+                        if column != Self::Id && !columns.contains(&column){
+                            columns.push(column);
+                        }
+                    }
+                }
+                
+
+                // If only ID, fallback to defaults
+                if columns.len() == 1 {
+                    Self::defaults()
+                } else {
+                    columns
+                }
+            }
+            Err(_) => Self::defaults()
+        }
+    }
+
 }
 
 /// Sort order for columns
