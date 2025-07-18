@@ -72,6 +72,8 @@ pub struct App {
     pub sort_columns: Vec<SortColumn>,
     /// Confirm cancel popup state
     cancel_confirm: bool,
+    // Set Auto Update enable/disable
+    pub auto_refresh_enable: bool
 }
 
 impl App {
@@ -114,13 +116,14 @@ impl App {
             script_view: JobScript::new(),
             status_message: String::new(),
             status_timeout: None,
-            job_refresh_interval: 10, // Default to 10 seconds refresh
+            job_refresh_interval: 30, // Default to 30 seconds refresh
             available_partitions,
             available_qos,
             available_states,
             selected_columns,
             sort_columns,
             cancel_confirm: false,
+            auto_refresh_enable: true
         })
     }
 
@@ -382,6 +385,7 @@ impl App {
             &status_text,
             self.last_refresh.elapsed(),
             self.job_refresh_interval,
+            self.auto_refresh_enable
         );
     }
 
@@ -420,6 +424,7 @@ impl App {
             AppEvent::Tick => self.handle_tick(),
             _ => {}
         }
+
 
         Ok(())
     }
@@ -706,6 +711,15 @@ impl App {
                 }
             }
 
+            (_, KeyCode::Char('u'))
+                if !self.filter_popup.visible
+                    && !self.script_view.visible
+                    && !self.columns_popup.visible =>
+            {
+    
+                self.auto_refresh_enable = !self.auto_refresh_enable;
+            }
+
             _ => {}
         }
     }
@@ -716,10 +730,11 @@ impl App {
         // seems unnecessary?
     }
 
-    /// Handle tick events (called periodically)
+    // Handle tick events (called periodically)
     fn handle_tick(&mut self) {
         // Check if it's time to auto-refresh
         if !self.filter_popup.visible
+            && self.auto_refresh_enable
             && !self.script_view.visible
             && !self.columns_popup.visible
             && self.last_refresh.elapsed().as_secs() >= self.job_refresh_interval

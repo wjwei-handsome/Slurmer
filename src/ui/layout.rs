@@ -33,6 +33,7 @@ pub fn draw_header(
     status_text: &str,
     time_since_refresh: Duration,
     refresh_interval: u64,
+    autorefesh_enable: bool
 ) {
     // Split the header area into title and status
     let header_chunks = Layout::default()
@@ -54,11 +55,17 @@ pub fn draw_header(
     frame.render_widget(title, header_chunks[0]);
 
     // Render the status part
+    let auto_status = if autorefesh_enable {
+        format!("(auto: {}s)", refresh_interval)
+    } else {
+        "(Auto-Refresh disabled!)".to_string()
+    };
+
     let status_info = format!(
-        "{} | Refresh: {}s ago (auto: {}s)",
+        "{} | Refresh: {}s ago {}",
         status_text,
         time_since_refresh.as_secs(),
-        refresh_interval
+        auto_status
     );
 
     let status = Paragraph::new(status_info)
@@ -83,6 +90,7 @@ pub fn draw_footer(frame: &mut Frame, area: Rect, job_stat: (usize, usize, usize
         ("a", "SelectAll"),
         ("r", "Refresh"),
         ("x", "Cancel"),
+        ("u", "Toggle Refresh")
     ];
 
     let mut footer_text: Vec<Span> = text_hashmap
