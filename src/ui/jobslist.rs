@@ -193,16 +193,7 @@ impl JobsList {
         // Create rows for each job
         let rows = self.jobs.iter().enumerate().map(|(i, job)| {
             let is_selected = self.selected_jobs.contains(&i);
-            let color = match job.state {
-                JobState::Pending => Color::Yellow,
-                JobState::Running => Color::Green,
-                JobState::Completed => Color::Blue,
-                JobState::Failed | JobState::Timeout | JobState::NodeFail | JobState::Boot => {
-                    Color::Red
-                }
-                JobState::Cancelled => Color::Magenta,
-                _ => Color::White,
-            };
+            let color = state_color(job.state);
 
             let style = if is_selected {
                 Style::default().fg(color).add_modifier(Modifier::REVERSED)
@@ -312,5 +303,21 @@ impl JobsList {
             .filter_map(|&i| self.jobs.get(i))
             .map(|job| job.id.clone())
             .collect()
+    }
+}
+
+/// Colour for a job state, shared by every view that lists jobs
+pub fn state_color(state: JobState) -> Color {
+    match state {
+        JobState::Pending => Color::Yellow,
+        JobState::Running => Color::Green,
+        JobState::Completed => Color::Blue,
+        JobState::Failed
+        | JobState::Timeout
+        | JobState::NodeFail
+        | JobState::Boot
+        | JobState::OutOfMemory => Color::Red,
+        JobState::Cancelled => Color::Magenta,
+        _ => Color::White,
     }
 }

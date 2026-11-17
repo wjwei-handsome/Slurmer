@@ -1,10 +1,11 @@
 pub mod command;
+pub mod sacct;
 pub mod squeue;
 
 use std::fmt;
 use std::str::FromStr;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum JobState {
     Pending,
     Running,
@@ -15,6 +16,8 @@ pub enum JobState {
     NodeFail,
     Preempted,
     Boot,
+    OutOfMemory,
+    #[default]
     Other,
 }
 
@@ -30,6 +33,7 @@ impl JobState {
             JobState::NodeFail,
             JobState::Preempted,
             JobState::Boot,
+            JobState::OutOfMemory,
         ]
     }
 }
@@ -46,6 +50,7 @@ impl fmt::Display for JobState {
             JobState::NodeFail => "NODE_FAIL",
             JobState::Preempted => "PREEMPTED",
             JobState::Boot => "BOOT_FAIL",
+            JobState::OutOfMemory => "OUT_OF_MEMORY",
             JobState::Other => "OTHER",
         };
         write!(f, "{}", state_str)
@@ -66,6 +71,7 @@ impl FromStr for JobState {
             "NODE_FAIL" | "NF" => Ok(JobState::NodeFail),
             "PREEMPTED" | "PR" => Ok(JobState::Preempted),
             "BOOT_FAIL" | "BF" => Ok(JobState::Boot),
+            "OUT_OF_MEMORY" | "OOM" => Ok(JobState::OutOfMemory),
             _ => Ok(JobState::Other),
         }
     }

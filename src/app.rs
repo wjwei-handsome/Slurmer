@@ -14,12 +14,14 @@ use tokio::runtime::Runtime;
 use crate::{
     slurm::{
         command::{execute_scancel, get_partitions, get_qos},
+        sacct::{run_sacct, HistoryJob, SacctOptions},
         squeue::{run_squeue, SqueueOptions},
         JobState,
     },
     ui::{
         columns::{ColumnsAction, ColumnsPopup, JobColumn, SortColumn, SortOrder},
         filter::{FilterAction, FilterPopup},
+        history::{HistoryAction, HistoryView},
         jobscript::JobScript,
         jobslist::JobsList,
         layout::{centered_popup_area, draw_footer, draw_header, draw_main_layout},
@@ -52,6 +54,8 @@ pub struct App {
     pub columns_popup: ColumnsPopup,
     /// Log view state
     pub log_view: LogView,
+    /// Job history view state
+    pub history_view: HistoryView,
     /// Script View state
     pub script_view: JobScript,
     /// Status message to display in the status bar
@@ -111,6 +115,7 @@ impl App {
             filter_popup: FilterPopup::new(),
             columns_popup: ColumnsPopup::new(selected_columns.clone(), sort_columns.clone()),
             log_view: LogView::new(),
+            history_view: HistoryView::new(),
             script_view: JobScript::new(),
             status_message: String::new(),
             status_timeout: None,
@@ -245,6 +250,53 @@ impl App {
         Ok(())
     }
 
+    /// Re-read past jobs from the accounting database.
+    ///
+    /// Failures are kept on the view itself rather than raised, so the
+    /// popup can explain them; the usual cause is a cluster without job
+    /// accounting enabled.
+    fn refresh_history(&mut self) {
+        let options = SacctOptions {
+            user: self.squeue_options.user.clone(),
+            states: self.squeue_options.states.clone(),
+            partitions: self.squeue_options.partitions.clone(),
+            window: self.history_view.window,
+        };
+
+        match self.runtime.block_on(async { run_sacct(&options).await }) {
+            Ok(jobs) => {
+                let jobs = self.filter_history_jobs(jobs);
+                self.history_view.update_jobs(jobs);
+            }
+            Err(e) => {
+                self.history_view.jobs.clear();
+                self.history_view.error = Some(e.to_string());
+            }
+        }
+    }
+
+    /// Apply the filters that `sacct` has no flags for, reusing the
+    /// patterns already entered in the filter popup.
+    fn filter_history_jobs(&self, mut jobs: Vec<HistoryJob>) -> Vec<HistoryJob> {
+        if !self.squeue_options.qos.is_empty() {
+            jobs.retain(|job| self.squeue_options.qos.contains(&job.qos));
+        }
+
+        if let Some(pattern) = &self.squeue_options.name_filter {
+            if let Ok(re) = regex::Regex::new(pattern) {
+                jobs.retain(|job| re.is_match(&job.name));
+            }
+        }
+
+        if let Some(pattern) = &self.squeue_options.node_filter {
+            if let Ok(re) = regex::Regex::new(pattern) {
+                jobs.retain(|job| re.is_match(&job.node_list));
+            }
+        }
+
+        jobs
+    }
+
     /// Render the application UI
     pub fn render(&mut self, frame: &mut Frame) {
         let areas = draw_main_layout(frame);
@@ -259,6 +311,12 @@ impl App {
 
         // Draw the footer with controls
         self.render_footer(frame, areas[2]);
+
+        // If the history view is visible, draw it
+        if self.history_view.visible {
+            let popup_area = centered_popup_area(frame.area(), 95, 90);
+            self.history_view.render(frame, popup_area);
+        }
 
         // If filter popup is visible, draw it
         if self.filter_popup.visible {
@@ -426,6 +484,22 @@ impl App {
 
     /// Handle key events
     fn handle_key_event(&mut self, key: KeyEvent) {
+        // The history view owns the keyboard while it is open, except for
+        // Ctrl+C and for the shared filter popup layered on top of it.
+        let interrupt = key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('c');
+        if self.history_view.visible && !self.filter_popup.visible && !interrupt {
+            match self.history_view.handle_key(key) {
+                HistoryAction::Close => self.history_view.visible = false,
+                HistoryAction::Refresh => self.refresh_history(),
+                HistoryAction::OpenFilter => {
+                    self.filter_popup.visible = true;
+                    self.filter_popup.initialize(&self.squeue_options);
+                }
+                HistoryAction::None => {}
+            }
+            return;
+        }
+
         match (key.modifiers, key.code) {
             // Quit application
             (_, KeyCode::Esc) | (KeyModifiers::CONTROL, KeyCode::Char('c')) => {
@@ -450,6 +524,18 @@ impl App {
                 self.filter_popup.visible = true;
                 // Initialize filter popup with current options
                 self.filter_popup.initialize(&self.squeue_options);
+            }
+
+            // Job history
+            (_, KeyCode::Char('h'))
+                if !self.filter_popup.visible
+                    && !self.script_view.visible
+                    && !self.columns_popup.visible
+                    && !self.log_view.visible
+                    && !self.cancel_confirm =>
+            {
+                self.history_view.visible = true;
+                self.refresh_history();
             }
 
             // Navigation
@@ -722,6 +808,7 @@ impl App {
         if !self.filter_popup.visible
             && !self.script_view.visible
             && !self.columns_popup.visible
+            && !self.history_view.visible
             && self.last_refresh.elapsed().as_secs() >= self.job_refresh_interval
         {
             if let Err(e) = self.refresh_jobs() {
@@ -755,6 +842,11 @@ impl App {
 
         // Ensure we refresh the jobs with the updated filters
         let result = self.refresh_jobs();
+
+        // The history view shares these filters, so keep it in step
+        if self.history_view.visible {
+            self.refresh_history();
+        }
 
         // Display feedback about the filter application
         if result.is_ok() {
