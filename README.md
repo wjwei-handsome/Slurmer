@@ -16,6 +16,16 @@ It provides an intuitive, interactive interface to view, filter, sort, and manag
 ![](./images/script.png)<br>![](./images/log.png)
 - **🎮 Job Management**: Cancel selected jobs
 ![](./images/cancel.png)
+- **📈 Job History & Efficiency**: Review past jobs from the Slurm accounting database and see how much of the CPU, memory and walltime they reserved was actually used, so over-allocated jobs are easy to spot
+![](./images/history.png)<br>![](./images/history-cpu.png)
+
+  - **CPU%** — `TotalCPU / (AllocCPUS x Elapsed)`: how much of the reserved CPU time the job burned, the same ratio `seff` reports
+  - **Mem%** — peak `MaxRSS` over the memory allocated per node
+  - **Time%** — elapsed time over the requested time limit
+
+  Running and pending jobs are listed but show `-`, since Slurm only records their CPU and memory usage once their steps finish.
+
+  The history view reuses whatever is set in the filter menu (user, state, partition, QoS, job name and node regexes), and <kbd>←</kbd>/<kbd>→</kbd> moves the time window between 24h, 3d, 7d, 30d and 90d.
 
 
 <!-- | 🔄 **Real-time Job Monitoring** | 🔍 **Advanced Filtering** | 📊 **Customizable Columns** |
@@ -49,6 +59,7 @@ Just run `slurmer`.
 - <kbd>f</kbd>: Open filter menu
 - <kbd>c</kbd>: Open column selection menu
 - <kbd>v</kbd>: View job logs
+- <kbd>h</kbd>: Job history with CPU/memory/walltime efficiency
 - <kbd>Enter</kbd>: View job script
 - <kbd>Space</kbd>: Select job
 - <kbd>a</kbd>: Select all jobs
@@ -61,6 +72,7 @@ More detailed keybindings can be found each popup menu.
 ## 🔗 Dependencies
 
 - slurm utilities (e.g., `squeue`, `scancel`) is required.
+- `sacct` and a cluster running Slurm job accounting are required for the job history view.
 - [`bat`](https://github.com/sharkdp/bat) is optional for viewing job scripts.
 
 ## ⚙️ Configuration
