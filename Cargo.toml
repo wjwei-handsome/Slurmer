@@ -10,7 +10,7 @@ readme = "README.md"
 exclude = ["images/",]
 
 [dependencies]
-crossterm = "0.28.1"
+crossterm = "0.29.0"
 ratatui = "0.29.0"
 crossbeam = "0.8.2"
 notify = "6.1.1"
